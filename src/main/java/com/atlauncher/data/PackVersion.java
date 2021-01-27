@@ -1,6 +1,6 @@
 /*
  * ATLauncher - https://github.com/ATLauncher/ATLauncher
- * Copyright (C) 2013-2020 ATLauncher
+ * Copyright (C) 2013-2021 ATLauncher
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -17,6 +17,8 @@
  */
 package com.atlauncher.data;
 
+import com.atlauncher.data.curseforge.CurseForgeFile;
+
 public class PackVersion {
     public String version;
     public String hash;
@@ -26,14 +28,25 @@ public class PackVersion {
     public boolean isDev = false;
     public boolean hasLoader = false;
     public boolean hasChoosableLoader = false;
+    public transient Integer _modpacksChId = null;
+    public transient CurseForgeFile _curseForgeFile = null;
 
     public String getSafeVersion() {
         return this.version.replaceAll("[^A-Za-z0-9]", "");
     }
 
     public String toString() {
-        if (this.minecraftVersion.version.equalsIgnoreCase(this.version)) {
+        if (this.minecraftVersion == null
+                || (this.minecraftVersion.version.equalsIgnoreCase(this.version) && !this.minecraftVersion.snapshot)) {
             return this.version;
+        }
+
+        if (this.minecraftVersion.version.equalsIgnoreCase(this.version) && this.minecraftVersion.snapshot) {
+            return this.version + " (Snapshot)";
+        }
+
+        if (this.minecraftVersion.snapshot) {
+            return this.version + " (" + this.minecraftVersion.version + ")" + " (Snapshot)";
         }
 
         return this.version + " (" + this.minecraftVersion.version + ")";
@@ -41,6 +54,14 @@ public class PackVersion {
 
     public boolean versionMatches(String version) {
         return this.version.equalsIgnoreCase(version);
+    }
+
+    public boolean versionMatches(Instance instance) {
+        if (instance.isCurseForgePack()) {
+            return versionMatches(instance.launcher.curseForgeFile.displayName);
+        }
+
+        return versionMatches(instance.launcher.version);
     }
 
     public boolean hashMatches(String hash) {

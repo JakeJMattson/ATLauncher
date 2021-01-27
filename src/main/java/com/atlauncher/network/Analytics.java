@@ -1,6 +1,6 @@
 /*
  * ATLauncher - https://github.com/ATLauncher/ATLauncher
- * Copyright (C) 2013-2020 ATLauncher
+ * Copyright (C) 2013-2021 ATLauncher
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -19,7 +19,7 @@ package com.atlauncher.network;
 
 import com.atlauncher.App;
 import com.atlauncher.Network;
-import com.atlauncher.data.Constants;
+import com.atlauncher.constants.Constants;
 import com.atlauncher.evnt.listener.SettingsListener;
 import com.atlauncher.managers.LogManager;
 import com.atlauncher.utils.Java;
@@ -34,15 +34,15 @@ public final class Analytics implements SettingsListener {
         ga = GoogleAnalytics.builder()
                 .withConfig(new GoogleAnalyticsConfig().setDiscoverRequestParameters(true)
                         .setProxyHost(App.settings.proxyHost).setProxyPort(App.settings.proxyPort)
-                        .setEnabled(App.settings.enableAnalytics))
+                        .setEnabled(!App.disableAnalytics && App.settings.enableAnalytics))
                 .withDefaultRequest(new DefaultRequest().userAgent(Network.USER_AGENT)
                         .clientId(App.settings.analyticsClientId).customDimension(1, Java.getLauncherJavaVersion()))
                 .withTrackingId(Constants.GA_TRACKING_ID).withAppName(Constants.LAUNCHER_NAME)
-                .withAppVersion(Constants.VERSION.toString()).build();
+                .withAppVersion(Constants.VERSION.toStringForLogging()).build();
 
         ga.screenView().sessionControl("start").sendAsync();
 
-        Runtime.getRuntime().addShutdownHook(new Thread(() -> endSession()));
+        Runtime.getRuntime().addShutdownHook(new Thread(Analytics::endSession));
     }
 
     public static void sendScreenView(String title) {
@@ -101,6 +101,6 @@ public final class Analytics implements SettingsListener {
     @Override
     public void onSettingsSaved() {
         ga.getConfig().setProxyHost(App.settings.proxyHost).setProxyPort(App.settings.proxyPort)
-                .setEnabled(App.settings.enableAnalytics);
+                .setEnabled(!App.disableAnalytics && App.settings.enableAnalytics);
     }
 }

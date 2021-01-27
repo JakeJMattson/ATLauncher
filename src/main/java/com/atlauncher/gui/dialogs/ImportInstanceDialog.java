@@ -1,6 +1,6 @@
 /*
  * ATLauncher - https://github.com/ATLauncher/ATLauncher
- * Copyright (C) 2013-2020 ATLauncher
+ * Copyright (C) 2013-2021 ATLauncher
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -34,33 +34,32 @@ import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JTextField;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
 import javax.swing.filechooser.FileFilter;
 
 import com.atlauncher.App;
 import com.atlauncher.FileSystem;
 import com.atlauncher.builders.HTMLBuilder;
+import com.atlauncher.constants.UIConstants;
 import com.atlauncher.managers.DialogManager;
 import com.atlauncher.network.Analytics;
-import com.atlauncher.utils.CursePackUtils;
+import com.atlauncher.utils.ImportPackUtils;
 import com.atlauncher.utils.Utils;
 
 import org.mini2Dx.gettext.GetText;
-import org.zeroturnaround.zip.ZipUtil;
 
 @SuppressWarnings("serial")
 public class ImportInstanceDialog extends JDialog {
-    private JPanel middle;
-    private JPanel bottom;
 
-    private JLabel fileLabel;
-    private JTextField filePath;
-    private JButton browseButton;
+    private final JTextField url;
+    private final JTextField filePath;
 
-    private JButton addButton;
+    private final JButton addButton;
 
     public ImportInstanceDialog() {
-        super(App.launcher.getParent(), GetText.tr("Import Instance"), ModalityType.APPLICATION_MODAL);
-        setSize(450, 200);
+        super(App.launcher.getParent(), GetText.tr("Import Instance"), ModalityType.DOCUMENT_MODAL);
+        setSize(500, 250);
         setLocationRelativeTo(null);
         setLayout(new BorderLayout());
         setIconImage(Utils.getImage("/assets/image/Icon.png"));
@@ -70,11 +69,11 @@ public class ImportInstanceDialog extends JDialog {
         Analytics.sendScreenView("Import Instance Dialog");
 
         // Middle Panel Stuff
-        middle = new JPanel();
+        JPanel middle = new JPanel();
         middle.setLayout(new BorderLayout());
 
         JEditorPane infoMessage = new JEditorPane("text/html", new HTMLBuilder().center().text(GetText.tr(
-                "Select an exported instance zip to import it.<br/>We currently support Twitch/CurseForge and ATLauncher exported zip files."))
+                "Select an exported instance zip to import it.<br/>We currently support ATLauncher, CurseForge and MultiMC exported zip files."))
                 .build());
         infoMessage.setEditable(false);
         middle.add(infoMessage, BorderLayout.NORTH);
@@ -83,19 +82,53 @@ public class ImportInstanceDialog extends JDialog {
         GridBagConstraints gbc = new GridBagConstraints();
         gbc.gridx = 0;
         gbc.gridy = 0;
+        gbc.insets = UIConstants.LABEL_INSETS;
         gbc.anchor = GridBagConstraints.BASELINE_TRAILING;
-        fileLabel = new JLabel(GetText.tr("File") + ": ");
+        JLabel urlLabel = new JLabel(GetText.tr("Url") + ": ");
+        mainPanel.add(urlLabel, gbc);
+
+        gbc.gridx++;
+        gbc.insets = UIConstants.FIELD_INSETS;
+        gbc.anchor = GridBagConstraints.BASELINE_LEADING;
+        url = new JTextField(25);
+        url.getDocument().addDocumentListener(new DocumentListener() {
+            @Override
+            public void insertUpdate(DocumentEvent e) {
+                emptyZipPathField();
+                changeAddButtonStatus();
+            }
+
+            @Override
+            public void removeUpdate(DocumentEvent e) {
+                emptyZipPathField();
+                changeAddButtonStatus();
+            }
+
+            @Override
+            public void changedUpdate(DocumentEvent e) {
+                emptyZipPathField();
+                changeAddButtonStatus();
+            }
+        });
+        mainPanel.add(url, gbc);
+
+        gbc.gridx = 0;
+        gbc.gridy++;
+        gbc.insets = UIConstants.LABEL_INSETS;
+        gbc.anchor = GridBagConstraints.BASELINE_TRAILING;
+        JLabel fileLabel = new JLabel(GetText.tr("File") + ": ");
         fileLabel.setBorder(BorderFactory.createEmptyBorder(10, 0, 0, 0));
         mainPanel.add(fileLabel, gbc);
 
         gbc.gridx++;
+        gbc.insets = UIConstants.FIELD_INSETS;
         gbc.anchor = GridBagConstraints.BASELINE_LEADING;
         JPanel filePathPanel = new JPanel(new FlowLayout());
         filePath = new JTextField(17);
         filePath.setEnabled(false);
         filePathPanel.add(filePath);
 
-        browseButton = new JButton(GetText.tr("Browse"));
+        JButton browseButton = new JButton(GetText.tr("Browse"));
         browseButton.addActionListener(e -> {
             JFileChooser chooser = new JFileChooser();
             chooser.setCurrentDirectory(FileSystem.USER_DOWNLOADS.toFile());
@@ -114,11 +147,7 @@ public class ImportInstanceDialog extends JDialog {
                         return true;
                     }
 
-                    if (!f.getName().endsWith(".zip")) {
-                        return false;
-                    }
-
-                    return ZipUtil.containsEntry(f, "manifest.json");
+                    return f.getName().endsWith(".zip");
                 }
             });
 
@@ -133,19 +162,22 @@ public class ImportInstanceDialog extends JDialog {
         middle.add(mainPanel, BorderLayout.CENTER);
 
         // Bottom Panel Stuff
-        bottom = new JPanel();
+        JPanel bottom = new JPanel();
         bottom.setLayout(new FlowLayout());
         addButton = new JButton(GetText.tr("Import"));
         addButton.addActionListener(e -> {
             setVisible(false);
 
-            final ProgressDialog dialog = new ProgressDialog(GetText.tr("Import Instance"), 0,
+            final ProgressDialog<Boolean> dialog = new ProgressDialog<>(GetText.tr("Import Instance"), 0,
                     GetText.tr("Import Instance"));
 
             dialog.addThread(new Thread(() -> {
-                if (!filePath.getText().isEmpty()) {
-                    Analytics.sendEvent(new File(filePath.getText()).getName(), "AddFromZip", "ImportPack");
-                    dialog.setReturnValue(CursePackUtils.loadFromFile(new File(filePath.getText())));
+                if (!url.getText().isEmpty()) {
+                    Analytics.sendEvent(url.getText(), "AddFromUrl", "ImportInstance");
+                    dialog.setReturnValue(ImportPackUtils.loadFromUrl(url.getText()));
+                } else if (!filePath.getText().isEmpty()) {
+                    Analytics.sendEvent(new File(filePath.getText()).getName(), "AddFromZip", "ImportInstance");
+                    dialog.setReturnValue(ImportPackUtils.loadFromFile(new File(filePath.getText())));
                 } else {
                     dialog.setReturnValue(false);
                 }
@@ -154,11 +186,11 @@ public class ImportInstanceDialog extends JDialog {
 
             dialog.start();
 
-            if (!((boolean) dialog.getReturnValue())) {
+            if (!dialog.getReturnValue()) {
                 setVisible(true);
-                DialogManager.okDialog().setTitle(GetText.tr("Failed To Add Pack"))
+                DialogManager.okDialog().setTitle(GetText.tr("Failed To Import Instance"))
                         .setContent(new HTMLBuilder().center().text(GetText.tr(
-                                "An error occured when trying to add Curse pack.<br/><br/>Check the console for more information."))
+                                "An error occured when trying to import an instance.<br/><br/>Check the console for more information."))
                                 .build())
                         .setType(DialogManager.ERROR).show();
             } else {
@@ -180,7 +212,13 @@ public class ImportInstanceDialog extends JDialog {
         setVisible(true);
     }
 
+    private void emptyZipPathField() {
+        if (!url.getText().isEmpty()) {
+            filePath.setText("");
+        }
+    }
+
     private void changeAddButtonStatus() {
-        addButton.setEnabled(!filePath.getText().isEmpty());
+        addButton.setEnabled(!url.getText().isEmpty() || !filePath.getText().isEmpty());
     }
 }

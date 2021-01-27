@@ -1,6 +1,6 @@
 /*
  * ATLauncher - https://github.com/ATLauncher/ATLauncher
- * Copyright (C) 2013-2020 ATLauncher
+ * Copyright (C) 2013-2021 ATLauncher
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -66,10 +66,7 @@ import org.zeroturnaround.zip.ZipUtil;
 
 @SuppressWarnings("serial")
 public class ServerCard extends CollapsiblePanel implements RelocalizationListener {
-    private final JSplitPane splitter = new JSplitPane();
     private final Server server;
-    private final JPanel rightPanel = new JPanel();
-    private final JTextArea descArea = new JTextArea();
     private final ImagePanel image;
     private final JButton launchButton = new JButton(GetText.tr("Launch"));
     private final JButton launchAndCloseButton = new JButton(GetText.tr("Launch & Close"));
@@ -83,17 +80,20 @@ public class ServerCard extends CollapsiblePanel implements RelocalizationListen
         super(server);
         this.server = server;
         this.image = new ImagePanel(server.getImage().getImage());
-        this.splitter.setLeftComponent(this.image);
-        this.splitter.setRightComponent(this.rightPanel);
-        this.splitter.setEnabled(false);
+        JSplitPane splitter = new JSplitPane();
+        splitter.setLeftComponent(this.image);
+        JPanel rightPanel = new JPanel();
+        splitter.setRightComponent(rightPanel);
+        splitter.setEnabled(false);
 
-        this.descArea.setText(server.getPackDescription());
-        this.descArea.setBorder(BorderFactory.createEmptyBorder(0, 5, 0, 5));
-        this.descArea.setEditable(false);
-        this.descArea.setHighlighter(null);
-        this.descArea.setLineWrap(true);
-        this.descArea.setWrapStyleWord(true);
-        this.descArea.setEditable(false);
+        JTextArea descArea = new JTextArea();
+        descArea.setText(server.getPackDescription());
+        descArea.setBorder(BorderFactory.createEmptyBorder(0, 5, 0, 5));
+        descArea.setEditable(false);
+        descArea.setHighlighter(null);
+        descArea.setLineWrap(true);
+        descArea.setWrapStyleWord(true);
+        descArea.setEditable(false);
 
         JPanel top = new JPanel(new FlowLayout(FlowLayout.CENTER, 5, 2));
         JPanel bottom = new JPanel(new FlowLayout(FlowLayout.CENTER, 5, 2));
@@ -118,14 +118,14 @@ public class ServerCard extends CollapsiblePanel implements RelocalizationListen
             this.launchAndCloseButton.setVisible(false);
         }
 
-        this.rightPanel.setLayout(new BorderLayout());
-        this.rightPanel.setPreferredSize(new Dimension(this.rightPanel.getPreferredSize().width, 180));
-        this.rightPanel.add(new JScrollPane(this.descArea, JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED,
+        rightPanel.setLayout(new BorderLayout());
+        rightPanel.setPreferredSize(new Dimension(rightPanel.getPreferredSize().width, 180));
+        rightPanel.add(new JScrollPane(descArea, JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED,
                 JScrollPane.HORIZONTAL_SCROLLBAR_NEVER), BorderLayout.CENTER);
-        this.rightPanel.add(as, BorderLayout.SOUTH);
+        rightPanel.add(as, BorderLayout.SOUTH);
 
         this.getContentPane().setLayout(new BorderLayout());
-        this.getContentPane().add(this.splitter, BorderLayout.CENTER);
+        this.getContentPane().add(splitter, BorderLayout.CENTER);
 
         RelocalizationManager.addListener(this);
 
@@ -134,18 +134,10 @@ public class ServerCard extends CollapsiblePanel implements RelocalizationListen
     }
 
     private void addActionListeners() {
-        this.launchButton.addActionListener(e -> {
-            server.launch("nogui", false);
-        });
-        this.launchAndCloseButton.addActionListener(e -> {
-            server.launch("nogui", true);
-        });
-        this.launchWithGui.addActionListener(e -> {
-            server.launch(false);
-        });
-        this.launchWithGuiAndClose.addActionListener(e -> {
-            server.launch(true);
-        });
+        this.launchButton.addActionListener(e -> server.launch("nogui", false));
+        this.launchAndCloseButton.addActionListener(e -> server.launch("nogui", true));
+        this.launchWithGui.addActionListener(e -> server.launch(false));
+        this.launchWithGuiAndClose.addActionListener(e -> server.launch(true));
         this.backupButton.addActionListener(e -> {
             int ret = DialogManager.yesNoDialog().setTitle(GetText.tr("Backing Up {0}", server.name))
                     .setContent(new HTMLBuilder().center().text(GetText.tr(
@@ -155,7 +147,7 @@ public class ServerCard extends CollapsiblePanel implements RelocalizationListen
 
             if (ret == DialogManager.YES_OPTION) {
                 final JDialog dialog = new JDialog(App.launcher.getParent(), GetText.tr("Backing Up {0}", server.name),
-                        ModalityType.APPLICATION_MODAL);
+                        ModalityType.DOCUMENT_MODAL);
                 dialog.setSize(300, 100);
                 dialog.setLocationRelativeTo(App.launcher.getParent());
                 dialog.setResizable(false);

@@ -1,6 +1,6 @@
 /*
  * ATLauncher - https://github.com/ATLauncher/ATLauncher
- * Copyright (C) 2013-2020 ATLauncher
+ * Copyright (C) 2013-2021 ATLauncher
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -61,10 +61,6 @@ public final class LogEvent {
 
         if ((this.meta & LOG4J) == LOG4J) {
             switch (type) {
-                case INFO: {
-                    logger.info(body);
-                    break;
-                }
                 case WARN: {
                     logger.warn(body);
                     break;
@@ -77,6 +73,7 @@ public final class LogEvent {
                     logger.debug(body);
                     break;
                 }
+                case INFO:
                 default: {
                     logger.info(body);
                     break;
@@ -90,7 +87,7 @@ public final class LogEvent {
         return "[" + Timestamper.now() + "] [" + this.type.name() + "]" + this.body;
     }
 
-    public static enum LogType {
+    public enum LogType {
         INFO, WARN, ERROR, DEBUG;
 
         public Color color() {

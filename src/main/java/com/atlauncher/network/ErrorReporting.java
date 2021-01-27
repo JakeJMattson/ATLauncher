@@ -1,6 +1,6 @@
 /*
  * ATLauncher - https://github.com/ATLauncher/ATLauncher
- * Copyright (C) 2013-2020 ATLauncher
+ * Copyright (C) 2013-2021 ATLauncher
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -22,7 +22,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import com.atlauncher.data.Constants;
+import com.atlauncher.constants.Constants;
 import com.atlauncher.data.minecraft.loaders.LoaderVersion;
 import com.atlauncher.utils.Java;
 
@@ -35,6 +35,34 @@ public final class ErrorReporting {
     public static SentryClient client;
     public static List<String> sentEvents = new ArrayList<>();
 
+    public static List<String> ignoredMessages = new ArrayList<>();
+
+    static {
+        ignoredMessages.add("Network is unreachable: connect");
+        ignoredMessages.add("Permission denied: connect");
+        ignoredMessages.add("Connection timed out: connect");
+        ignoredMessages.add("Connection refused: connect");
+        ignoredMessages.add("failed to delete");
+        ignoredMessages.add("failed to rename");
+        ignoredMessages.add("Failed to connect to");
+        ignoredMessages.add("Connection reset");
+        ignoredMessages.add("timeout");
+        ignoredMessages.add("Read timed out");
+        ignoredMessages.add("Access is denied");
+        ignoredMessages.add("request wasn't successful");
+        ignoredMessages.add("There is not enough space on the disk");
+        ignoredMessages.add("The system cannot find the file specified");
+        ignoredMessages.add("being used by another process");
+        ignoredMessages.add("The cloud file provider is not running");
+        ignoredMessages.add("Name or service not known");
+        ignoredMessages.add("Received fatal alert: handshake_failure");
+        ignoredMessages.add("not verified (no certificates)");
+        ignoredMessages.add("No such host is known");
+        ignoredMessages.add("nodename nor servname provided, or not known");
+        ignoredMessages.add("NoSuchFileException");
+        ignoredMessages.add("Account does not own Minecraft");
+    }
+
     public static void init(boolean disable) {
         if (!disable) {
             client = Sentry.init(Constants.SENTRY_DSN);
@@ -43,14 +71,14 @@ public final class ErrorReporting {
                     return false;
                 }
 
-                if (event.getMessage().contains("Permission denied: connect")) {
+                if (ignoredMessages.stream().anyMatch(m -> event.getMessage().contains(m))) {
                     return false;
                 }
 
                 sentEvents.add(event.getMessage());
                 return true;
             });
-            client.setRelease(Constants.VERSION.toString());
+            client.setRelease(Constants.VERSION.toStringForLogging());
             client.addTag("java.version", Java.getLauncherJavaVersion());
             client.addTag("os.name", System.getProperty("os.name"));
             client.addTag("os.version", System.getProperty("os.version"));

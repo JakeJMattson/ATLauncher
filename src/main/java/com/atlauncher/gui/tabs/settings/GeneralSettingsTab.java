@@ -1,6 +1,6 @@
 /*
  * ATLauncher - https://github.com/ATLauncher/ATLauncher
- * Copyright (C) 2013-2020 ATLauncher
+ * Copyright (C) 2013-2021 ATLauncher
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -17,8 +17,11 @@
  */
 package com.atlauncher.gui.tabs.settings;
 
+import java.awt.Dimension;
 import java.awt.GridBagConstraints;
+import java.awt.Point;
 import java.text.SimpleDateFormat;
+import java.util.Calendar;
 import java.util.Date;
 import java.util.Locale;
 
@@ -31,8 +34,9 @@ import javax.swing.JPanel;
 
 import com.atlauncher.App;
 import com.atlauncher.builders.HTMLBuilder;
+import com.atlauncher.constants.Constants;
 import com.atlauncher.constants.UIConstants;
-import com.atlauncher.data.Constants;
+import com.atlauncher.data.AddModRestriction;
 import com.atlauncher.data.Language;
 import com.atlauncher.gui.components.JLabelWithHover;
 import com.atlauncher.utils.ComboItem;
@@ -43,29 +47,22 @@ import org.mini2Dx.gettext.GetText;
 
 @SuppressWarnings("serial")
 public class GeneralSettingsTab extends AbstractSettingsTab {
-    private JLabelWithHover languageLabel;
-    private JComboBox<String> language;
-    private JButton translateButton;
-    private JLabelWithHover themeLabel;
-    private JComboBox<ComboItem<String>> theme;
-    private JLabelWithHover dateFormatLabel;
-    private JComboBox<ComboItem<String>> dateFormat;
-    private JLabelWithHover selectedTabOnStartupLabel;
-    private JComboBox<ComboItem<Integer>> selectedTabOnStartup;
-    private JLabelWithHover sortPacksAlphabeticallyLabel;
-    private JCheckBox sortPacksAlphabetically;
-    private JLabelWithHover keepLauncherOpenLabel;
-    private JCheckBox keepLauncherOpen;
-    private JLabelWithHover enableConsoleLabel;
-    private JCheckBox enableConsole;
-    private JLabelWithHover enableTrayIconLabel;
-    private JCheckBox enableTrayIcon;
-    private JLabelWithHover enableDiscordIntegrationLabel;
-    private JCheckBox enableDiscordIntegration;
-    private JLabelWithHover enableFeralGamemodeLabel;
+    private final JComboBox<String> language;
+    private final JComboBox<ComboItem<String>> theme;
+    private final JComboBox<ComboItem<String>> dateFormat;
+    private final JComboBox<ComboItem<Integer>> selectedTabOnStartup;
+    private final JComboBox<ComboItem<String>> defaultModPlatform;
+    private final JComboBox<ComboItem<AddModRestriction>> addModRestriction;
+    private final JCheckBox sortPacksAlphabetically;
+    private final JCheckBox showPackNameAndVersion;
+    private final JCheckBox keepLauncherOpen;
+    private final JCheckBox enableConsole;
+    private final JCheckBox enableTrayIcon;
+    private final JCheckBox enableDiscordIntegration;
     private JCheckBox enableFeralGamemode;
-    private JLabelWithHover disableAddModRestrictionsLabel;
-    private JCheckBox disableAddModRestrictions;
+    private final JCheckBox disableCustomFonts;
+    private final JCheckBox rememberWindowSizePosition;
+    private final JCheckBox useNativeFilePicker;
 
     public GeneralSettingsTab() {
         // Language
@@ -74,7 +71,7 @@ public class GeneralSettingsTab extends AbstractSettingsTab {
         gbc.insets = UIConstants.LABEL_INSETS;
         gbc.anchor = GridBagConstraints.BELOW_BASELINE_TRAILING;
 
-        languageLabel = new JLabelWithHover(GetText.tr("Language") + ":", HELP_ICON,
+        JLabelWithHover languageLabel = new JLabelWithHover(GetText.tr("Language") + ":", HELP_ICON,
                 GetText.tr("This specifies the language used by the Launcher."));
         add(languageLabel, gbc);
 
@@ -91,7 +88,7 @@ public class GeneralSettingsTab extends AbstractSettingsTab {
 
         languagePanel.add(Box.createHorizontalStrut(5));
 
-        translateButton = new JButton(GetText.tr("Help Translate"));
+        JButton translateButton = new JButton(GetText.tr("Help Translate"));
         translateButton.addActionListener(e -> OS.openWebBrowser(Constants.CROWDIN_URL));
         languagePanel.add(translateButton);
 
@@ -104,7 +101,7 @@ public class GeneralSettingsTab extends AbstractSettingsTab {
         gbc.insets = UIConstants.LABEL_INSETS;
         gbc.anchor = GridBagConstraints.BASELINE_TRAILING;
 
-        themeLabel = new JLabelWithHover(GetText.tr("Theme") + ":", HELP_ICON,
+        JLabelWithHover themeLabel = new JLabelWithHover(GetText.tr("Theme") + ":", HELP_ICON,
                 GetText.tr("This sets the theme that the launcher will use."));
 
         add(themeLabel, gbc);
@@ -113,16 +110,17 @@ public class GeneralSettingsTab extends AbstractSettingsTab {
         gbc.insets = UIConstants.FIELD_INSETS;
         gbc.anchor = GridBagConstraints.BASELINE_LEADING;
         theme = new JComboBox<>();
-        theme.addItem(new ComboItem<String>("com.atlauncher.themes.Dark", "ATLauncher Dark (default)"));
-        theme.addItem(new ComboItem<String>("com.atlauncher.themes.Light", "ATLauncher Light"));
-        theme.addItem(new ComboItem<String>("com.atlauncher.themes.MonokaiPro", "Monokai Pro"));
-        theme.addItem(new ComboItem<String>("com.atlauncher.themes.DraculaContrast", "Dracula Contrast"));
-        theme.addItem(new ComboItem<String>("com.atlauncher.themes.HiberbeeDark", "Hiberbee Dark"));
-        theme.addItem(new ComboItem<String>("com.atlauncher.themes.Vuesion", "Vuesion"));
-        theme.addItem(new ComboItem<String>("com.atlauncher.themes.MaterialPalenightContrast",
-                "Material Palenight Contrast"));
-        theme.addItem(new ComboItem<String>("com.atlauncher.themes.ArcOrange", "Arc Orange"));
-        theme.addItem(new ComboItem<String>("com.atlauncher.themes.CyanLight", "Cyan Light"));
+        theme.addItem(new ComboItem<>("com.atlauncher.themes.Dark", "ATLauncher Dark (default)"));
+        theme.addItem(new ComboItem<>("com.atlauncher.themes.Light", "ATLauncher Light"));
+        theme.addItem(new ComboItem<>("com.atlauncher.themes.MonokaiPro", "Monokai Pro"));
+        theme.addItem(new ComboItem<>("com.atlauncher.themes.DraculaContrast", "Dracula Contrast"));
+        theme.addItem(new ComboItem<>("com.atlauncher.themes.HiberbeeDark", "Hiberbee Dark"));
+        theme.addItem(new ComboItem<>("com.atlauncher.themes.Vuesion", "Vuesion"));
+        theme.addItem(
+                new ComboItem<>("com.atlauncher.themes.MaterialPalenightContrast", "Material Palenight Contrast"));
+        theme.addItem(new ComboItem<>("com.atlauncher.themes.ArcOrange", "Arc Orange"));
+        theme.addItem(new ComboItem<>("com.atlauncher.themes.CyanLight", "Cyan Light"));
+        theme.addItem(new ComboItem<>("com.atlauncher.themes.HighTechDarkness", "High Tech Darkness"));
 
         for (int i = 0; i < theme.getItemCount(); i++) {
             ComboItem<String> item = theme.getItemAt(i);
@@ -142,7 +140,7 @@ public class GeneralSettingsTab extends AbstractSettingsTab {
         gbc.insets = UIConstants.LABEL_INSETS;
         gbc.anchor = GridBagConstraints.BASELINE_TRAILING;
 
-        dateFormatLabel = new JLabelWithHover(GetText.tr("Date Format") + ":", HELP_ICON,
+        JLabelWithHover dateFormatLabel = new JLabelWithHover(GetText.tr("Date Format") + ":", HELP_ICON,
                 GetText.tr("This controls the format that dates are displayed in the launcher."));
 
         add(dateFormatLabel, gbc);
@@ -152,8 +150,14 @@ public class GeneralSettingsTab extends AbstractSettingsTab {
         gbc.anchor = GridBagConstraints.BASELINE_LEADING;
         dateFormat = new JComboBox<>();
 
+        Calendar cal = Calendar.getInstance();
+        cal.setTime(new Date());
+        cal.set(Calendar.DATE, 31);
+        cal.set(Calendar.MONTH, Calendar.DECEMBER);
+        Date exampleDate = cal.getTime();
+
         for (String format : Constants.DATE_FORMATS) {
-            dateFormat.addItem(new ComboItem<String>(format, new SimpleDateFormat(format).format(new Date())));
+            dateFormat.addItem(new ComboItem<>(format, new SimpleDateFormat(format).format(exampleDate)));
         }
 
         dateFormat.setSelectedItem(App.settings.dateFormat);
@@ -167,7 +171,7 @@ public class GeneralSettingsTab extends AbstractSettingsTab {
         gbc.insets = UIConstants.LABEL_INSETS;
         gbc.anchor = GridBagConstraints.BASELINE_TRAILING;
 
-        selectedTabOnStartupLabel = new JLabelWithHover(GetText.tr("Default Tab") + ":", HELP_ICON,
+        JLabelWithHover selectedTabOnStartupLabel = new JLabelWithHover(GetText.tr("Default Tab") + ":", HELP_ICON,
                 GetText.tr("Which tab to have selected by default when opening the launcher."));
 
         add(selectedTabOnStartupLabel, gbc);
@@ -176,18 +180,91 @@ public class GeneralSettingsTab extends AbstractSettingsTab {
         gbc.insets = UIConstants.FIELD_INSETS;
         gbc.anchor = GridBagConstraints.BASELINE_LEADING;
         selectedTabOnStartup = new JComboBox<>();
-        selectedTabOnStartup.addItem(new ComboItem<Integer>(0, GetText.tr("News")));
-        selectedTabOnStartup.addItem(new ComboItem<Integer>(1, GetText.tr("Vanilla Packs")));
-        selectedTabOnStartup.addItem(new ComboItem<Integer>(2, GetText.tr("Featured Packs")));
-        selectedTabOnStartup.addItem(new ComboItem<Integer>(3, GetText.tr("Packs")));
-        selectedTabOnStartup.addItem(new ComboItem<Integer>(4, GetText.tr("Instances")));
-        selectedTabOnStartup.addItem(new ComboItem<Integer>(5, GetText.tr("Servers")));
-        selectedTabOnStartup.addItem(new ComboItem<Integer>(6, GetText.tr("Accounts")));
-        selectedTabOnStartup.addItem(new ComboItem<Integer>(7, GetText.tr("Tools")));
-        selectedTabOnStartup.addItem(new ComboItem<Integer>(8, GetText.tr("Settings")));
+        selectedTabOnStartup.addItem(new ComboItem<>(0, GetText.tr("News")));
+        selectedTabOnStartup.addItem(new ComboItem<>(1, GetText.tr("Vanilla Packs")));
+        selectedTabOnStartup.addItem(new ComboItem<>(2, GetText.tr("Featured Packs")));
+        selectedTabOnStartup.addItem(new ComboItem<>(3, GetText.tr("Packs")));
+        selectedTabOnStartup.addItem(new ComboItem<>(4, GetText.tr("Instances")));
+        selectedTabOnStartup.addItem(new ComboItem<>(5, GetText.tr("Servers")));
+        selectedTabOnStartup.addItem(new ComboItem<>(6, GetText.tr("Accounts")));
+        selectedTabOnStartup.addItem(new ComboItem<>(7, GetText.tr("Tools")));
+        selectedTabOnStartup.addItem(new ComboItem<>(8, GetText.tr("Settings")));
         selectedTabOnStartup.setSelectedItem(App.settings.selectedTabOnStartup);
 
+        for (int i = 0; i < selectedTabOnStartup.getItemCount(); i++) {
+            ComboItem<Integer> item = selectedTabOnStartup.getItemAt(i);
+
+            if (item.getValue() == App.settings.selectedTabOnStartup) {
+                selectedTabOnStartup.setSelectedIndex(i);
+                break;
+            }
+        }
+
         add(selectedTabOnStartup, gbc);
+
+        // Default mod platform
+
+        gbc.gridx = 0;
+        gbc.gridy++;
+        gbc.insets = UIConstants.LABEL_INSETS;
+        gbc.anchor = GridBagConstraints.BASELINE_TRAILING;
+
+        JLabelWithHover defaultModPlatformLabel = new JLabelWithHover(GetText.tr("Default Mod Platform") + ":",
+                HELP_ICON, GetText.tr("The default mod platform to use when adding mods to instances."));
+
+        add(defaultModPlatformLabel, gbc);
+
+        gbc.gridx++;
+        gbc.insets = UIConstants.FIELD_INSETS;
+        gbc.anchor = GridBagConstraints.BASELINE_LEADING;
+        defaultModPlatform = new JComboBox<>();
+        defaultModPlatform.addItem(new ComboItem<>("CurseForge", "CurseForge"));
+        defaultModPlatform.addItem(new ComboItem<>("Modrinth", "Modrinth"));
+
+        for (int i = 0; i < defaultModPlatform.getItemCount(); i++) {
+            ComboItem<String> item = defaultModPlatform.getItemAt(i);
+
+            if (item.getValue().equals(App.settings.defaultModPlatform)) {
+                defaultModPlatform.setSelectedIndex(i);
+                break;
+            }
+        }
+
+        add(defaultModPlatform, gbc);
+
+        // Add Mod Restrictions
+
+        gbc.gridx = 0;
+        gbc.gridy++;
+        gbc.insets = UIConstants.LABEL_INSETS;
+        gbc.anchor = GridBagConstraints.BASELINE_TRAILING;
+
+        JLabelWithHover addModRestrictionsLabel = new JLabelWithHover(GetText.tr("Add Mod Restrictions") + ":",
+                HELP_ICON, GetText.tr("What restrictions should be in place when adding mods from a mod platform."));
+
+        add(addModRestrictionsLabel, gbc);
+
+        gbc.gridx++;
+        gbc.insets = UIConstants.FIELD_INSETS;
+        gbc.anchor = GridBagConstraints.BASELINE_LEADING;
+        addModRestriction = new JComboBox<>();
+        addModRestriction.addItem(
+                new ComboItem<>(AddModRestriction.STRICT, GetText.tr("Only show mods for current Minecraft version")));
+        addModRestriction.addItem(new ComboItem<>(AddModRestriction.LAX,
+                GetText.tr("Show mods for the current major Minecraft version (eg: 1.16.x)")));
+        addModRestriction
+                .addItem(new ComboItem<>(AddModRestriction.NONE, GetText.tr("Show mods for all Minecraft versions")));
+
+        for (int i = 0; i < addModRestriction.getItemCount(); i++) {
+            ComboItem<AddModRestriction> item = addModRestriction.getItemAt(i);
+
+            if (item.getValue() == App.settings.addModRestriction) {
+                addModRestriction.setSelectedIndex(i);
+                break;
+            }
+        }
+
+        add(addModRestriction, gbc);
 
         // Sort Packs Alphabetically
 
@@ -195,7 +272,8 @@ public class GeneralSettingsTab extends AbstractSettingsTab {
         gbc.gridy++;
         gbc.insets = UIConstants.LABEL_INSETS;
         gbc.anchor = GridBagConstraints.BASELINE_TRAILING;
-        sortPacksAlphabeticallyLabel = new JLabelWithHover(GetText.tr("Sort Packs Alphabetically") + "?", HELP_ICON,
+        JLabelWithHover sortPacksAlphabeticallyLabel = new JLabelWithHover(
+                GetText.tr("Sort Packs Alphabetically") + "?", HELP_ICON,
                 GetText.tr("If you want to sort the packs in the packs panel alphabetically by default or not."));
         add(sortPacksAlphabeticallyLabel, gbc);
 
@@ -208,13 +286,32 @@ public class GeneralSettingsTab extends AbstractSettingsTab {
         }
         add(sortPacksAlphabetically, gbc);
 
+        // Show Pack Name & Version
+
+        gbc.gridx = 0;
+        gbc.gridy++;
+        gbc.insets = UIConstants.LABEL_INSETS;
+        gbc.anchor = GridBagConstraints.BASELINE_TRAILING;
+        JLabelWithHover showPackNameAndVersionLabel = new JLabelWithHover(GetText.tr("Show Pack Name & Version") + "?",
+                HELP_ICON, GetText.tr("If you want to show the packs name and version on your instances."));
+        add(showPackNameAndVersionLabel, gbc);
+
+        gbc.gridx++;
+        gbc.insets = UIConstants.CHECKBOX_FIELD_INSETS;
+        gbc.anchor = GridBagConstraints.BASELINE_LEADING;
+        showPackNameAndVersion = new JCheckBox();
+        if (App.settings.showPackNameAndVersion) {
+            showPackNameAndVersion.setSelected(true);
+        }
+        add(showPackNameAndVersion, gbc);
+
         // Keep Launcher Open
 
         gbc.gridx = 0;
         gbc.gridy++;
         gbc.insets = UIConstants.LABEL_INSETS;
         gbc.anchor = GridBagConstraints.BASELINE_TRAILING;
-        keepLauncherOpenLabel = new JLabelWithHover(GetText.tr("Keep Launcher Open") + "?", HELP_ICON,
+        JLabelWithHover keepLauncherOpenLabel = new JLabelWithHover(GetText.tr("Keep Launcher Open") + "?", HELP_ICON,
                 GetText.tr("This determines if ATLauncher should stay open or exit after Minecraft has exited"));
         add(keepLauncherOpenLabel, gbc);
 
@@ -233,7 +330,7 @@ public class GeneralSettingsTab extends AbstractSettingsTab {
         gbc.gridy++;
         gbc.insets = UIConstants.LABEL_INSETS;
         gbc.anchor = GridBagConstraints.BASELINE_TRAILING;
-        enableConsoleLabel = new JLabelWithHover(GetText.tr("Enable Console") + "?", HELP_ICON,
+        JLabelWithHover enableConsoleLabel = new JLabelWithHover(GetText.tr("Enable Console") + "?", HELP_ICON,
                 GetText.tr("If you want the console to be visible when opening the Launcher."));
         add(enableConsoleLabel, gbc);
 
@@ -252,7 +349,7 @@ public class GeneralSettingsTab extends AbstractSettingsTab {
         gbc.gridy++;
         gbc.insets = UIConstants.LABEL_INSETS;
         gbc.anchor = GridBagConstraints.BASELINE_TRAILING;
-        enableTrayIconLabel = new JLabelWithHover(GetText.tr("Enable Tray Menu") + "?", HELP_ICON,
+        JLabelWithHover enableTrayIconLabel = new JLabelWithHover(GetText.tr("Enable Tray Menu") + "?", HELP_ICON,
                 new HTMLBuilder().center().split(100).text(GetText.tr(
                         "The Tray Menu is a little icon that shows in your system taskbar which allows you to perform different functions to do various things with the launcher such as hiding or showing the console, killing Minecraft or closing ATLauncher."))
                         .build());
@@ -273,7 +370,8 @@ public class GeneralSettingsTab extends AbstractSettingsTab {
         gbc.gridy++;
         gbc.insets = UIConstants.LABEL_INSETS;
         gbc.anchor = GridBagConstraints.BASELINE_TRAILING;
-        enableDiscordIntegrationLabel = new JLabelWithHover(GetText.tr("Enable Discord Integration") + "?", HELP_ICON,
+        JLabelWithHover enableDiscordIntegrationLabel = new JLabelWithHover(
+                GetText.tr("Enable Discord Integration") + "?", HELP_ICON,
                 GetText.tr("This will enable showing which pack you're playing in Discord."));
         add(enableDiscordIntegrationLabel, gbc);
 
@@ -295,8 +393,8 @@ public class GeneralSettingsTab extends AbstractSettingsTab {
             gbc.gridy++;
             gbc.insets = UIConstants.LABEL_INSETS;
             gbc.anchor = GridBagConstraints.BASELINE_TRAILING;
-            enableFeralGamemodeLabel = new JLabelWithHover(GetText.tr("Enable Feral Gamemode") + "?", HELP_ICON,
-                    GetText.tr("This will enable Feral Gamemode for packs launched."));
+            JLabelWithHover enableFeralGamemodeLabel = new JLabelWithHover(GetText.tr("Enable Feral Gamemode") + "?",
+                    HELP_ICON, GetText.tr("This will enable Feral Gamemode for packs launched."));
             add(enableFeralGamemodeLabel, gbc);
 
             gbc.gridx++;
@@ -318,46 +416,101 @@ public class GeneralSettingsTab extends AbstractSettingsTab {
             add(enableFeralGamemode, gbc);
         }
 
-        // Disable Curse Minecraft version restrictions
+        // Disable custom fonts
 
         gbc.gridx = 0;
         gbc.gridy++;
         gbc.insets = UIConstants.LABEL_INSETS;
         gbc.anchor = GridBagConstraints.BASELINE_TRAILING;
-        disableAddModRestrictionsLabel = new JLabelWithHover(GetText.tr("Disable Add Mod Restrictions?"), HELP_ICON,
+        JLabelWithHover disableCustomFontsLabel = new JLabelWithHover(GetText.tr("Disable Custom Fonts?"), HELP_ICON,
                 new HTMLBuilder().center().split(100).text(GetText.tr(
-                        "This will allow you to disable the restrictions in place to prevent you from installing mods from Curse that are not for your current Minecraft version or loader. By disabling these restrictions, you can install any mod, so be sure that it's compatable with the Minecraft version and loader (if any) that you're on."))
+                        "This will disable custom fonts used by themes. If your system has issues with font display not looking right, you can disable this to switch to a default compatible font."))
                         .build());
-        add(disableAddModRestrictionsLabel, gbc);
+        add(disableCustomFontsLabel, gbc);
 
         gbc.gridx++;
         gbc.insets = UIConstants.CHECKBOX_FIELD_INSETS;
         gbc.anchor = GridBagConstraints.BASELINE_LEADING;
-        disableAddModRestrictions = new JCheckBox();
-        disableAddModRestrictions.setSelected(App.settings.disableAddModRestrictions);
-        add(disableAddModRestrictions, gbc);
+        disableCustomFonts = new JCheckBox();
+        disableCustomFonts.setSelected(App.settings.disableCustomFonts);
+        add(disableCustomFonts, gbc);
+
+        // Remember gui sizes and positions
+
+        gbc.gridx = 0;
+        gbc.gridy++;
+        gbc.insets = UIConstants.LABEL_INSETS;
+        gbc.anchor = GridBagConstraints.BASELINE_TRAILING;
+        JLabelWithHover rememberWindowSizePositionLabel = new JLabelWithHover(
+                GetText.tr("Remember Window Size & Positions?"), HELP_ICON,
+                new HTMLBuilder().center().split(100).text(GetText.tr(
+                        "This will remember the windows positions and size so they keep the same size and position when you restart the launcher."))
+                        .build());
+        add(rememberWindowSizePositionLabel, gbc);
+
+        gbc.gridx++;
+        gbc.insets = UIConstants.CHECKBOX_FIELD_INSETS;
+        gbc.anchor = GridBagConstraints.BASELINE_LEADING;
+        rememberWindowSizePosition = new JCheckBox();
+        rememberWindowSizePosition.setSelected(App.settings.rememberWindowSizePosition);
+        add(rememberWindowSizePosition, gbc);
+
+        // Use native file picker
+
+        gbc.gridx = 0;
+        gbc.gridy++;
+        gbc.insets = UIConstants.LABEL_INSETS;
+        gbc.anchor = GridBagConstraints.BASELINE_TRAILING;
+        JLabelWithHover useNativeFilePickerLabel = new JLabelWithHover(GetText.tr("Use Native File Picker?"), HELP_ICON,
+                new HTMLBuilder().center().split(100)
+                        .text(GetText
+                                .tr("This will use your operating systems native file picker when selecting files."))
+                        .build());
+        add(useNativeFilePickerLabel, gbc);
+
+        gbc.gridx++;
+        gbc.insets = UIConstants.CHECKBOX_FIELD_INSETS;
+        gbc.anchor = GridBagConstraints.BASELINE_LEADING;
+        useNativeFilePicker = new JCheckBox();
+        useNativeFilePicker.setSelected(App.settings.useNativeFilePicker);
+        add(useNativeFilePicker, gbc);
     }
 
+    @SuppressWarnings("unchecked")
     public boolean needToReloadTheme() {
         return !((ComboItem<String>) theme.getSelectedItem()).getValue().equalsIgnoreCase(App.settings.theme)
+                || App.settings.disableCustomFonts != disableCustomFonts.isSelected()
                 || !((String) language.getSelectedItem()).equalsIgnoreCase(App.settings.language);
+    }
+
+    @SuppressWarnings("unchecked")
+    public boolean themeChanged() {
+        return !((ComboItem<String>) theme.getSelectedItem()).getValue().equalsIgnoreCase(App.settings.theme);
     }
 
     public boolean needToReloadPacksPanel() {
         return sortPacksAlphabetically.isSelected() != App.settings.sortPacksAlphabetically;
     }
 
+    public boolean needToReloadInstancesPanel() {
+        return showPackNameAndVersion.isSelected() != App.settings.showPackNameAndVersion;
+    }
+
     public boolean needToReloadLanguage() {
         return !((String) language.getSelectedItem()).equalsIgnoreCase(Language.selected);
     }
 
+    @SuppressWarnings("unchecked")
     public void save() {
         Language.setLanguage((String) language.getSelectedItem());
         App.settings.language = (String) language.getSelectedItem();
         App.settings.theme = ((ComboItem<String>) theme.getSelectedItem()).getValue();
         App.settings.dateFormat = ((ComboItem<String>) dateFormat.getSelectedItem()).getValue();
         App.settings.selectedTabOnStartup = ((ComboItem<Integer>) selectedTabOnStartup.getSelectedItem()).getValue();
+        App.settings.defaultModPlatform = ((ComboItem<String>) defaultModPlatform.getSelectedItem()).getValue();
+        App.settings.addModRestriction = ((ComboItem<AddModRestriction>) addModRestriction.getSelectedItem()).getValue();
         App.settings.sortPacksAlphabetically = sortPacksAlphabetically.isSelected();
+        App.settings.showPackNameAndVersion = showPackNameAndVersion.isSelected();
         App.settings.keepLauncherOpen = keepLauncherOpen.isSelected();
         App.settings.enableConsole = enableConsole.isSelected();
         App.settings.enableTrayMenu = enableTrayIcon.isSelected();
@@ -369,7 +522,18 @@ public class GeneralSettingsTab extends AbstractSettingsTab {
             App.settings.enableFeralGamemode = false;
         }
 
-        App.settings.disableAddModRestrictions = disableAddModRestrictions.isSelected();
+        App.settings.disableCustomFonts = disableCustomFonts.isSelected();
+        App.settings.rememberWindowSizePosition = rememberWindowSizePosition.isSelected();
+
+        if (!rememberWindowSizePosition.isSelected()) {
+            App.settings.consoleSize = new Dimension(650, 400);
+            App.settings.consolePosition = new Point(0, 0);
+
+            App.settings.launcherSize = new Dimension(1200, 700);
+            App.settings.launcherPosition = null;
+        }
+
+        App.settings.useNativeFilePicker = useNativeFilePicker.isSelected();
     }
 
     @Override

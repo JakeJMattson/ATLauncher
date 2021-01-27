@@ -1,6 +1,6 @@
 /*
  * ATLauncher - https://github.com/ATLauncher/ATLauncher
- * Copyright (C) 2013-2020 ATLauncher
+ * Copyright (C) 2013-2021 ATLauncher
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -49,7 +49,7 @@ public class ServerManager {
                 .orElse(new String[0])) {
             File serverDir = FileSystem.SERVERS.resolve(folder).toFile();
 
-            Server server = null;
+            Server server;
 
             try (FileReader fileReader = new FileReader(new File(serverDir, "server.json"))) {
                 server = Gsons.MINECRAFT.fromJson(fileReader, Server.class);
@@ -72,17 +72,15 @@ public class ServerManager {
     }
 
     public static void setServerVisibility(Server server, boolean collapsed) {
-        if (server != null && AccountManager.getSelectedAccount().isReal()) {
+        if (server != null) {
             if (collapsed) {
                 // Closed It
-                if (!AccountManager.getSelectedAccount().getCollapsedServers().contains(server.name)) {
-                    AccountManager.getSelectedAccount().getCollapsedServers().add(server.name);
+                if (!AccountManager.getSelectedAccount().collapsedServers.contains(server.name)) {
+                    AccountManager.getSelectedAccount().collapsedServers.add(server.name);
                 }
             } else {
                 // Opened It
-                if (AccountManager.getSelectedAccount().getCollapsedServers().contains(server.name)) {
-                    AccountManager.getSelectedAccount().getCollapsedServers().remove(server.name);
-                }
+                AccountManager.getSelectedAccount().collapsedServers.remove(server.name);
             }
             AccountManager.saveAccounts();
             App.launcher.reloadServersPanel();

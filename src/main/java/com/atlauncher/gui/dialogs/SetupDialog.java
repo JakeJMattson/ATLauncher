@@ -1,6 +1,6 @@
 /*
  * ATLauncher - https://github.com/ATLauncher/ATLauncher
- * Copyright (C) 2013-2020 ATLauncher
+ * Copyright (C) 2013-2021 ATLauncher
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -35,7 +35,7 @@ import javax.swing.JLabel;
 import javax.swing.JPanel;
 
 import com.atlauncher.App;
-import com.atlauncher.data.Constants;
+import com.atlauncher.constants.Constants;
 import com.atlauncher.data.Language;
 import com.atlauncher.evnt.listener.RelocalizationListener;
 import com.atlauncher.evnt.manager.RelocalizationManager;
@@ -47,23 +47,20 @@ import org.mini2Dx.gettext.GetText;
 
 public class SetupDialog extends JDialog implements RelocalizationListener {
     private static final long serialVersionUID = -2931970914611329658L;
-    private JPanel top;
-    private JPanel middle;
-    private JPanel bottom;
 
-    private JLabel setupLabel;
+    private final JLabel setupLabel;
 
-    private JLabel languageLabel;
-    private JComboBox<String> language;
+    private final JLabel languageLabel;
+    private final JComboBox<String> language;
 
-    private JLabel enableAnalyticsLabel;
-    private JCheckBox enableAnalytics;
+    private final JLabel enableAnalyticsLabel;
+    private final JCheckBox enableAnalytics;
 
-    private JButton saveButton;
+    private final JButton saveButton;
 
     public SetupDialog() {
         // #. {0} is the name of the launcher (ATLauncher)
-        super(null, GetText.tr("{0} Setup", Constants.LAUNCHER_NAME), ModalityType.APPLICATION_MODAL);
+        super(null, GetText.tr("{0} Setup", Constants.LAUNCHER_NAME), ModalityType.DOCUMENT_MODAL);
         this.requestFocus();
         this.setSize(400, 250);
         setLocationRelativeTo(null);
@@ -73,14 +70,14 @@ public class SetupDialog extends JDialog implements RelocalizationListener {
         setResizable(false);
 
         // Top Panel Stuff
-        top = new JPanel();
+        JPanel top = new JPanel();
 
         // #. {0} is the name of the launcher (ATLauncher)
         setupLabel = new JLabel(GetText.tr("Setting up {0}", Constants.LAUNCHER_NAME));
         top.add(setupLabel);
 
         // Middle Panel Stuff
-        middle = new JPanel();
+        JPanel middle = new JPanel();
         middle.setLayout(new GridBagLayout());
         GridBagConstraints gbc = new GridBagConstraints();
 
@@ -114,11 +111,11 @@ public class SetupDialog extends JDialog implements RelocalizationListener {
         gbc.gridx++;
         gbc.anchor = GridBagConstraints.BASELINE_LEADING;
         enableAnalytics = new JCheckBox();
-        enableAnalytics.setSelected(true);
+        enableAnalytics.setSelected(!App.disableAnalytics);
         middle.add(enableAnalytics, gbc);
 
         // Bottom Panel Stuff
-        bottom = new JPanel();
+        JPanel bottom = new JPanel();
         bottom.setLayout(new FlowLayout());
         saveButton = new JButton(GetText.tr("Save"));
         saveButton.addActionListener(e -> {

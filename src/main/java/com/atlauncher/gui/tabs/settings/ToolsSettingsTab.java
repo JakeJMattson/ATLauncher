@@ -1,6 +1,6 @@
 /*
  * ATLauncher - https://github.com/ATLauncher/ATLauncher
- * Copyright (C) 2013-2020 ATLauncher
+ * Copyright (C) 2013-2021 ATLauncher
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -34,10 +34,10 @@ import org.mini2Dx.gettext.GetText;
 
 @SuppressWarnings("serial")
 public class ToolsSettingsTab extends AbstractSettingsTab implements RelocalizationListener {
-    private JLabelWithHover enableServerCheckerLabel;
-    private JCheckBox enableServerChecker;
+    private final JLabelWithHover enableServerCheckerLabel;
+    private final JCheckBox enableServerChecker;
 
-    private JLabelWithHover serverCheckerWaitLabel;
+    private final JLabelWithHover serverCheckerWaitLabel;
     private JSpinner serverCheckerWait;
 
     public ToolsSettingsTab() {

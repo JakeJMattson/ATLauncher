@@ -1,6 +1,6 @@
 /*
  * ATLauncher - https://github.com/ATLauncher/ATLauncher
- * Copyright (C) 2013-2020 ATLauncher
+ * Copyright (C) 2013-2021 ATLauncher
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -31,7 +31,7 @@ import com.atlauncher.utils.Utils;
 
 @SuppressWarnings("serial")
 public class DropDownButton extends JButton {
-    private JPopupMenu popupMenu;
+    private final JPopupMenu popupMenu;
 
     public DropDownButton(String label, JPopupMenu popupMenu) {
         super(label);

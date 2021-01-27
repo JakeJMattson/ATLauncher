@@ -1,6 +1,6 @@
 /*
  * ATLauncher - https://github.com/ATLauncher/ATLauncher
- * Copyright (C) 2013-2020 ATLauncher
+ * Copyright (C) 2013-2021 ATLauncher
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -18,6 +18,7 @@
 package com.atlauncher.gui.tabs.tools;
 
 import java.awt.BorderLayout;
+import java.awt.FlowLayout;
 
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
@@ -31,7 +32,7 @@ import org.mini2Dx.gettext.GetText;
 @SuppressWarnings("serial")
 public abstract class AbstractToolPanel extends JPanel {
     protected final JPanel MIDDLE_PANEL = new JPanel();
-    protected final JPanel BOTTOM_PANEL = new JPanel();
+    protected final JPanel BOTTOM_PANEL = new JPanel(new FlowLayout());
 
     protected final JButton LAUNCH_BUTTON = new JButton(GetText.tr("Launch"));
 
@@ -39,6 +40,8 @@ public abstract class AbstractToolPanel extends JPanel {
         setLayout(new BorderLayout());
         add(MIDDLE_PANEL, BorderLayout.CENTER);
         add(BOTTOM_PANEL, BorderLayout.SOUTH);
+
+        LAUNCH_BUTTON.setFont(App.THEME.getNormalFont().deriveFont(16f));
 
         if (TITLE != null) {
             setBorder(BorderFactory.createTitledBorder(null, TITLE, TitledBorder.LEADING, TitledBorder.DEFAULT_POSITION,

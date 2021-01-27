@@ -1,6 +1,6 @@
 /*
  * ATLauncher - https://github.com/ATLauncher/ATLauncher
- * Copyright (C) 2013-2020 ATLauncher
+ * Copyright (C) 2013-2021 ATLauncher
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -34,7 +34,7 @@ import javax.swing.JFrame;
 import javax.swing.JLabel;
 
 import com.atlauncher.builders.HTMLBuilder;
-import com.atlauncher.data.Constants;
+import com.atlauncher.constants.Constants;
 import com.atlauncher.data.DownloadableFile;
 import com.atlauncher.data.LauncherVersion;
 import com.atlauncher.gui.dialogs.ProgressDialog;
@@ -44,17 +44,18 @@ import com.atlauncher.gui.tabs.PacksTab;
 import com.atlauncher.gui.tabs.ServersTab;
 import com.atlauncher.managers.AccountManager;
 import com.atlauncher.managers.CheckingServersManager;
+import com.atlauncher.managers.CurseForgeUpdateManager;
 import com.atlauncher.managers.DialogManager;
 import com.atlauncher.managers.InstanceManager;
 import com.atlauncher.managers.LogManager;
 import com.atlauncher.managers.MinecraftManager;
+import com.atlauncher.managers.ModpacksChUpdateManager;
 import com.atlauncher.managers.NewsManager;
 import com.atlauncher.managers.PackManager;
 import com.atlauncher.managers.PerformanceManager;
 import com.atlauncher.managers.ServerManager;
 import com.atlauncher.network.Analytics;
 import com.atlauncher.network.DownloadPool;
-import com.atlauncher.utils.ATLauncherAPIUtils;
 import com.atlauncher.utils.Java;
 import com.atlauncher.utils.OS;
 import com.google.gson.JsonIOException;
@@ -79,6 +80,9 @@ public class Launcher {
     private PacksTab vanillaPacksPanel; // The vanilla packs panel
     private PacksTab featuredPacksPanel; // The featured packs panel
     private PacksTab packsPanel; // The packs panel
+
+    // Update thread
+    private Thread updateThread;
 
     // Minecraft tracking variables
     private Process minecraftProcess = null; // The process minecraft is running on
@@ -185,12 +189,10 @@ public class Launcher {
             CheckingServersManager.startCheckingServers();
         }
 
-        if (App.settings.enableLogs) {
-            App.TASKPOOL.execute(ATLauncherAPIUtils::postSystemInfo);
+        checkForExternalPackUpdates();
 
-            if (App.settings.enableAnalytics) {
-                Analytics.startSession();
-            }
+        if (App.settings.enableLogs && App.settings.enableAnalytics) {
+            Analytics.startSession();
         }
         PerformanceManager.end();
     }
@@ -222,7 +224,7 @@ public class Launcher {
             LogManager.info("Downloading Launcher Update");
             Analytics.sendEvent("Update", "Launcher");
 
-            ProgressDialog progressDialog = new ProgressDialog(GetText.tr("Downloading Launcher Update"), 1,
+            ProgressDialog<Boolean> progressDialog = new ProgressDialog<>(GetText.tr("Downloading Launcher Update"), 1,
                     GetText.tr("Downloading Launcher Update"));
             progressDialog.addThread(new Thread(() -> {
                 com.atlauncher.network.Download download = com.atlauncher.network.Download.build()
@@ -246,7 +248,7 @@ public class Launcher {
             }));
             progressDialog.start();
 
-            if ((Boolean) progressDialog.getReturnValue()) {
+            if (progressDialog.getReturnValue()) {
                 runUpdate(path, newFile.getAbsolutePath());
             }
         } catch (IOException e) {
@@ -333,6 +335,10 @@ public class Launcher {
     public boolean checkForUpdatedFiles() {
         this.launcherFiles = null;
 
+        App.TASKPOOL.execute(() -> {
+            checkForExternalPackUpdates();
+        });
+
         return hasUpdatedFiles();
     }
 
@@ -351,8 +357,24 @@ public class Launcher {
         return downloads.stream().anyMatch(com.atlauncher.network.Download::needToDownload);
     }
 
+    private void checkForExternalPackUpdates() {
+        if (updateThread != null && updateThread.isAlive()) {
+            updateThread.interrupt();
+        }
+
+        updateThread = new Thread(() -> {
+            if (InstanceManager.getInstances().stream().anyMatch(i -> i.isModpacksChPack())) {
+                ModpacksChUpdateManager.checkForUpdates();
+            }
+            if (InstanceManager.getInstances().stream().anyMatch(i -> i.isCurseForgePack())) {
+                CurseForgeUpdateManager.checkForUpdates();
+            }
+        });
+        updateThread.start();
+    }
+
     public void reloadLauncherData() {
-        final JDialog dialog = new JDialog(this.parent, ModalityType.APPLICATION_MODAL);
+        final JDialog dialog = new JDialog(this.parent, ModalityType.DOCUMENT_MODAL);
         dialog.setSize(300, 100);
         dialog.setTitle("Updating Launcher");
         dialog.setLocationRelativeTo(App.launcher.getParent());
@@ -364,6 +386,7 @@ public class Launcher {
                 downloadUpdatedFiles(); // Downloads updated files on the server
             }
             checkForLauncherUpdate();
+            checkForExternalPackUpdates();
             addExecutableBitToTools();
             NewsManager.loadNews(); // Load the news
             reloadNewsPanel(); // Reload news panel

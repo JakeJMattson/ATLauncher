@@ -1,6 +1,6 @@
 /*
  * ATLauncher - https://github.com/ATLauncher/ATLauncher
- * Copyright (C) 2013-2020 ATLauncher
+ * Copyright (C) 2013-2021 ATLauncher
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -22,9 +22,14 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.stream.Collectors;
 
 import com.atlauncher.annot.Json;
+import com.atlauncher.data.DisableableMod;
 import com.atlauncher.managers.LogManager;
+import com.atlauncher.workers.InstanceInstaller;
+import com.google.gson.annotations.SerializedName;
 
 /**
  * This class contains information about a pack's version. This is a singular
@@ -58,9 +63,10 @@ public class Version {
     public boolean noConfigs;
 
     /**
-     * If this version allows Curse mod integration.
+     * If this version allows CurseForge integration.
      */
-    public boolean enableCurseIntegration = false;
+    @SerializedName(value = "enableCurseForgeIntegration", alternate = { "enableCurseIntegration" })
+    public boolean enableCurseForgeIntegration = false;
 
     /**
      * If this version allows editing mods.
@@ -82,6 +88,12 @@ public class Version {
      * usually including the tweakClass for Forge.
      */
     public ExtraArguments extraArguments;
+
+    /**
+     * Details about any server arguments this version uses when creating the server
+     * scripts
+     */
+    public String serverArguments = "";
 
     /**
      * The java options for this version (if any).
@@ -188,8 +200,8 @@ public class Version {
         return this.noConfigs;
     }
 
-    public boolean hasEnabledCurseIntegration() {
-        return this.enableCurseIntegration;
+    public boolean hasEnabledCurseForgeIntegration() {
+        return this.enableCurseForgeIntegration;
     }
 
     public boolean hasEnabledEditingMods() {
@@ -268,24 +280,28 @@ public class Version {
         return this.mods;
     }
 
-    public List<Mod> getClientInstallMods() {
-        List<Mod> mods = new ArrayList<>();
-        for (Mod mod : this.mods) {
-            if (mod.installOnClient()) {
-                mods.add(mod);
-            }
-        }
-        return mods;
+    public List<Mod> getClientInstallMods(InstanceInstaller instanceInstaller) {
+        return getInstallMods(instanceInstaller, true);
     }
 
-    public List<Mod> getServerInstallMods() {
-        List<Mod> mods = new ArrayList<>();
-        for (Mod mod : this.mods) {
-            if (mod.installOnServer()) {
-                mods.add(mod);
+    public List<Mod> getServerInstallMods(InstanceInstaller instanceInstaller) {
+        return getInstallMods(instanceInstaller, false);
+    }
+
+    public List<Mod> getInstallMods(InstanceInstaller instanceInstaller, boolean client) {
+        return this.mods.stream().filter(client ? Mod::installOnClient : Mod::installOnServer).map(mod -> {
+            if (instanceInstaller.isReinstall) {
+                Optional<DisableableMod> matchingMod = instanceInstaller.instance.launcher.mods.parallelStream()
+                        .filter(dm -> dm.file.equals(mod.file)).findFirst();
+
+                if (matchingMod.isPresent() && matchingMod.get().hasFullCurseForgeInformation()) {
+                    mod.curseForgeProject = matchingMod.get().curseForgeProject;
+                    mod.curseForgeFile = matchingMod.get().curseForgeFile;
+                }
             }
-        }
-        return mods;
+
+            return mod;
+        }).collect(Collectors.toList());
     }
 
     public List<Action> getActions() {
@@ -344,7 +360,7 @@ public class Version {
             return null;
         }
         String colour = this.colours.get(key);
-        if (colour.substring(0, 1).equals("#")) {
+        if (colour.charAt(0) == '#') {
             colour = colour.replace("#", "");
         }
         if (!colour.matches("[0-9A-Fa-f]{6}")) {

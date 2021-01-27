@@ -1,6 +1,6 @@
 /*
  * ATLauncher - https://github.com/ATLauncher/ATLauncher
- * Copyright (C) 2013-2020 ATLauncher
+ * Copyright (C) 2013-2021 ATLauncher
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -46,7 +46,7 @@ public class ArgumentRule {
         StringBuilder argBuilder = new StringBuilder();
 
         for (String arg : (List<String>) this.value) {
-            argBuilder.append(arg + ' ');
+            argBuilder.append(arg).append(' ');
         }
 
         String arguments = argBuilder.toString();
@@ -75,7 +75,7 @@ public class ArgumentRule {
             return true; // No rules setup so we need it
         }
 
-        return this.rules.stream().filter(Rule::applies).count() != 0
+        return this.rules.stream().anyMatch(Rule::applies)
                 && this.rules.stream().filter(Rule::applies).allMatch(rule -> rule.action.equalsIgnoreCase("allow"));
     }
 }

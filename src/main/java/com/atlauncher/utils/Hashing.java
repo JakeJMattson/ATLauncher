@@ -1,6 +1,6 @@
 /*
  * ATLauncher - https://github.com/ATLauncher/ATLauncher
- * Copyright (C) 2013-2020 ATLauncher
+ * Copyright (C) 2013-2021 ATLauncher
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -41,7 +41,7 @@ import org.apache.commons.lang3.ArrayUtils;
 public final class Hashing {
     private static final char[] hex = "0123456789abcdef".toCharArray();
     private static final SoftReference<Caching.Cache<Object, HashCode>> hashcodes = new SoftReference<>(
-            Caching.<Object, HashCode>newLRU());
+            Caching.newLRU());
 
     public static HashCode md5(Path file) {
         if (!Files.exists(file)) {
@@ -154,6 +154,45 @@ public final class Hashing {
         }
     }
 
+    public static HashCode sha512(Path file) {
+        if (!Files.exists(file)) {
+            return HashCode.EMPTY;
+        }
+
+        try (Hasher hasher = new SHA512Hasher(Files.newInputStream(file))) {
+            return hasher.hash();
+        } catch (Exception e) {
+            LogManager.logStackTrace("Error hashing (SHA-512) file " + file.getFileName(), e);
+            return HashCode.EMPTY;
+        }
+    }
+
+    public static HashCode sha512(String str) {
+        if (str == null || str.isEmpty()) {
+            return HashCode.EMPTY;
+        }
+
+        try (Hasher hasher = new SHA512Hasher(new ByteArrayInputStream(str.getBytes(StandardCharsets.UTF_8)))) {
+            return hasher.hash();
+        } catch (Exception e) {
+            LogManager.logStackTrace("Error hashing (SHA-512) string " + str, e);
+            return HashCode.EMPTY;
+        }
+    }
+
+    public static HashCode sha512(byte[] bytes) {
+        if (bytes == null || bytes.length == 0) {
+            return HashCode.EMPTY;
+        }
+
+        try (Hasher hasher = new SHA512Hasher(new ByteArrayInputStream(bytes))) {
+            return hasher.hash();
+        } catch (Exception e) {
+            LogManager.logStackTrace("Error hashing (SHA-512) byte array", e);
+            return HashCode.EMPTY;
+        }
+    }
+
     public static HashCode sha1(Path file) {
         if (!Files.exists(file)) {
             return HashCode.EMPTY;
@@ -194,7 +233,38 @@ public final class Hashing {
     }
 
     private interface Hasher extends Closeable {
-        public HashCode hash();
+        HashCode hash();
+    }
+
+    private static final class SHA512Hasher implements Hasher {
+        private final InputStream is;
+        private final MessageDigest digest;
+
+        private SHA512Hasher(InputStream is) throws NoSuchAlgorithmException {
+            this.is = is;
+            this.digest = MessageDigest.getInstance("SHA-512");
+        }
+
+        @Override
+        public HashCode hash() {
+            try (ByteArrayOutputStream bos = new ByteArrayOutputStream()) {
+                byte[] buffer = new byte[8192];
+                int len;
+                while ((len = this.is.read(buffer, 0, 8192)) != -1) {
+                    bos.write(buffer, 0, len);
+                }
+
+                return new HashCode(this.digest.digest(bos.toByteArray()));
+            } catch (Exception e) {
+                LogManager.logStackTrace("Error hashing (SHA-512)", e);
+                return null;
+            }
+        }
+
+        @Override
+        public void close() throws IOException {
+            this.is.close();
+        }
     }
 
     private static final class SHA1Hasher implements Hasher {
@@ -261,7 +331,7 @@ public final class Hashing {
     @SuppressWarnings("serial")
     public static final class HashCode implements Serializable, Cloneable {
         private static final SoftReference<Caching.Cache<String, HashCode>> hashescache = new SoftReference<>(
-                Caching.<String, HashCode>newLRU());
+                Caching.newLRU());
 
         public static final HashCode EMPTY = new HashCode(new byte[0]);
 

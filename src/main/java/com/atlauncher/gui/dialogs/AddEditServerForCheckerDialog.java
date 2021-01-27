@@ -1,6 +1,6 @@
 /*
  * ATLauncher - https://github.com/ATLauncher/ATLauncher
- * Copyright (C) 2013-2020 ATLauncher
+ * Copyright (C) 2013-2021 ATLauncher
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -48,16 +48,11 @@ public class AddEditServerForCheckerDialog extends JDialog implements ActionList
      * Auto generated serial.
      */
     private static final long serialVersionUID = 3385411077046354453L;
-    private JPanel middle;
-    private JPanel bottom;
 
-    private JLabel serverNameLabel;
     private JTextField serverName;
 
-    private JLabel serverHostLabel;
     private JTextField serverHost;
 
-    private JLabel serverPortLabel;
     private JTextField serverPort;
 
     private JButton addEditButton;
@@ -67,7 +62,7 @@ public class AddEditServerForCheckerDialog extends JDialog implements ActionList
 
     public AddEditServerForCheckerDialog(MinecraftServer minecraftServer) {
         super(null, (minecraftServer == null ? GetText.tr("Add Server") : GetText.tr("Edit Server")),
-                ModalityType.APPLICATION_MODAL);
+                ModalityType.DOCUMENT_MODAL);
         setSize(300, 200);
         setLocationRelativeTo(null);
         setLayout(new BorderLayout());
@@ -92,7 +87,7 @@ public class AddEditServerForCheckerDialog extends JDialog implements ActionList
 
     private void setupComponents() {
         // Middle Panel Stuff
-        middle = new JPanel();
+        JPanel middle = new JPanel();
         middle.setLayout(new GridBagLayout());
         GridBagConstraints gbc = new GridBagConstraints();
 
@@ -101,7 +96,7 @@ public class AddEditServerForCheckerDialog extends JDialog implements ActionList
         gbc.gridx = 0;
         gbc.gridy = 0;
         gbc.anchor = GridBagConstraints.BASELINE_TRAILING;
-        serverNameLabel = new JLabel(GetText.tr("Name") + ": ");
+        JLabel serverNameLabel = new JLabel(GetText.tr("Name") + ": ");
         middle.add(serverNameLabel, gbc);
 
         gbc.gridx++;
@@ -114,7 +109,7 @@ public class AddEditServerForCheckerDialog extends JDialog implements ActionList
         gbc.gridx = 0;
         gbc.gridy++;
         gbc.anchor = GridBagConstraints.BASELINE_TRAILING;
-        serverHostLabel = new JLabel(GetText.tr("Host/IP") + ": ");
+        JLabel serverHostLabel = new JLabel(GetText.tr("Host/IP") + ": ");
         middle.add(serverHostLabel, gbc);
 
         gbc.gridx++;
@@ -127,7 +122,7 @@ public class AddEditServerForCheckerDialog extends JDialog implements ActionList
         gbc.gridx = 0;
         gbc.gridy++;
         gbc.anchor = GridBagConstraints.BASELINE_TRAILING;
-        serverPortLabel = new JLabel(GetText.tr("Port") + ": ");
+        JLabel serverPortLabel = new JLabel(GetText.tr("Port") + ": ");
         middle.add(serverPortLabel, gbc);
 
         gbc.gridx++;
@@ -137,7 +132,7 @@ public class AddEditServerForCheckerDialog extends JDialog implements ActionList
         middle.add(serverPort, gbc);
 
         // Bottom Panel Stuff
-        bottom = new JPanel();
+        JPanel bottom = new JPanel();
         bottom.setLayout(new FlowLayout());
 
         addEditButton = new JButton(GetText.tr("Add"));
@@ -172,9 +167,8 @@ public class AddEditServerForCheckerDialog extends JDialog implements ActionList
                 String name = serverName.getText();
                 final String host = serverHost.getText();
                 final int port = Integer.parseInt(serverPort.getText().replaceAll("[^0-9]", ""));
-                QueryVersion qv = null;
 
-                final ProgressDialog dialog = new ProgressDialog(GetText.tr("Checking Server"), 0,
+                final ProgressDialog<QueryVersion> dialog = new ProgressDialog<>(GetText.tr("Checking Server"), 0,
                         GetText.tr("Checking Server"), "Cancelled Server Check!");
                 dialog.addThread(new Thread(() -> {
                     dialog.setReturnValue(MCQuery.getMinecraftServerQueryVersion(host, port));
@@ -182,9 +176,7 @@ public class AddEditServerForCheckerDialog extends JDialog implements ActionList
                 }));
                 dialog.start();
 
-                if (dialog.getReturnValue() != null) {
-                    qv = (QueryVersion) dialog.getReturnValue();
-                }
+                QueryVersion qv = dialog.getReturnValue();
 
                 if (qv == null) {
                     DialogManager.okDialog().setTitle(GetText.tr("Error")).setContent(GetText.tr(

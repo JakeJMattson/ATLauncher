@@ -1,6 +1,6 @@
 /*
  * ATLauncher - https://github.com/ATLauncher/ATLauncher
- * Copyright (C) 2013-2020 ATLauncher
+ * Copyright (C) 2013-2021 ATLauncher
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -18,8 +18,11 @@
 package com.atlauncher.gui;
 
 import java.awt.BorderLayout;
+import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.SystemTray;
+import java.awt.event.ComponentAdapter;
+import java.awt.event.ComponentEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.util.Arrays;
@@ -31,7 +34,7 @@ import javax.swing.JTabbedPane;
 import javax.swing.WindowConstants;
 
 import com.atlauncher.App;
-import com.atlauncher.data.Constants;
+import com.atlauncher.constants.Constants;
 import com.atlauncher.data.Pack;
 import com.atlauncher.data.PackVersion;
 import com.atlauncher.evnt.listener.RelocalizationListener;
@@ -57,19 +60,8 @@ import com.atlauncher.utils.Utils;
 @SuppressWarnings("serial")
 public final class LauncherFrame extends JFrame implements RelocalizationListener {
     private JTabbedPane tabbedPane;
-    private NewsTab newsTab;
-    private PacksTab vanillaPacksTab;
-    private PacksTab featuredPacksTab;
-    private PacksTab packsTab;
-    private InstancesTab instancesTab;
-    private ServersTab serversTab;
-    private AccountsTab accountsTab;
-    private ToolsTab toolsTab;
-    private SettingsTab settingsTab;
 
     private List<Tab> tabs;
-
-    private LauncherBottomBar bottomBar;
 
     public LauncherFrame(boolean show) {
         LogManager.info("Launcher opening");
@@ -77,16 +69,29 @@ public final class LauncherFrame extends JFrame implements RelocalizationListene
         LogManager.info("*(Not Actually)");
 
         App.launcher.setParentFrame(this);
-        setSize(new Dimension(1200, 700));
-        setTitle(Constants.LAUNCHER_NAME + " " + Constants.VERSION);
-        setLocationRelativeTo(null);
+        setTitle(Constants.LAUNCHER_NAME);
         setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
-        setResizable(false);
-        this.setLayout(new BorderLayout());
+        setResizable(true);
+        setLayout(new BorderLayout());
         setIconImage(Utils.getImage("/assets/image/Icon.png"));
 
+        setMinimumSize(new Dimension(1200, 700));
+        setLocationRelativeTo(null);
+
+        try {
+            if (App.settings.rememberWindowSizePosition && App.settings.launcherSize != null) {
+                setSize(App.settings.launcherSize);
+            }
+
+            if (App.settings.rememberWindowSizePosition && App.settings.launcherPosition != null) {
+                setLocation(App.settings.launcherPosition);
+            }
+        } catch (Exception e) {
+            LogManager.logStackTrace("Error setting custom remembered window size settings", e);
+        }
+
         LogManager.info("Setting up Bottom Bar");
-        bottomBar = new LauncherBottomBar();
+        LauncherBottomBar bottomBar = new LauncherBottomBar();
         LogManager.info("Finished Setting up Bottom Bar");
 
         LogManager.info("Setting up Tabs");
@@ -156,6 +161,27 @@ public final class LauncherFrame extends JFrame implements RelocalizationListene
 
             }
         }
+
+        addComponentListener(new ComponentAdapter() {
+
+            public void componentResized(ComponentEvent evt) {
+                Component c = (Component) evt.getSource();
+
+                if (App.settings.rememberWindowSizePosition) {
+                    App.settings.launcherSize = c.getSize();
+                    App.settings.save();
+                }
+            }
+
+            public void componentMoved(ComponentEvent evt) {
+                Component c = (Component) evt.getSource();
+
+                if (App.settings.rememberWindowSizePosition) {
+                    App.settings.launcherPosition = c.getLocation();
+                    App.settings.save();
+                }
+            }
+        });
     }
 
     /**
@@ -163,47 +189,48 @@ public final class LauncherFrame extends JFrame implements RelocalizationListene
      */
     private void setupTabs() {
         tabbedPane = new JTabbedPane(JTabbedPane.RIGHT);
+        tabbedPane.setName("mainTabs");
 
         PerformanceManager.start("newsTab");
-        newsTab = new NewsTab();
+        NewsTab newsTab = new NewsTab();
         App.launcher.setNewsPanel(newsTab);
         PerformanceManager.end("newsTab");
 
         PerformanceManager.start("vanillaPacksTab");
-        vanillaPacksTab = new PacksTab(false, true);
+        PacksTab vanillaPacksTab = new PacksTab(false, true);
         App.launcher.setVanillaPacksPanel(vanillaPacksTab);
         PerformanceManager.end("vanillaPacksTab");
 
         PerformanceManager.start("featuredPacksTab");
-        featuredPacksTab = new PacksTab(true, false);
+        PacksTab featuredPacksTab = new PacksTab(true, false);
         App.launcher.setFeaturedPacksPanel(featuredPacksTab);
         PerformanceManager.end("featuredPacksTab");
 
         PerformanceManager.start("packsTab");
-        packsTab = new PacksTab(false, false);
+        PacksTab packsTab = new PacksTab(false, false);
         App.launcher.setPacksPanel(packsTab);
         PerformanceManager.end("packsTab");
 
         PerformanceManager.start("instancesTab");
-        instancesTab = new InstancesTab();
+        InstancesTab instancesTab = new InstancesTab();
         App.launcher.setInstancesPanel(instancesTab);
         PerformanceManager.end("instancesTab");
 
         PerformanceManager.start("serversTab");
-        serversTab = new ServersTab();
+        ServersTab serversTab = new ServersTab();
         App.launcher.setServersPanel(serversTab);
         PerformanceManager.end("serversTab");
 
         PerformanceManager.start("accountsTab");
-        accountsTab = new AccountsTab();
+        AccountsTab accountsTab = new AccountsTab();
         PerformanceManager.end("accountsTab");
 
         PerformanceManager.start("toolsTab");
-        toolsTab = new ToolsTab();
+        ToolsTab toolsTab = new ToolsTab();
         PerformanceManager.end("toolsTab");
 
         PerformanceManager.start("settingsTab");
-        settingsTab = new SettingsTab();
+        SettingsTab settingsTab = new SettingsTab();
         PerformanceManager.end("settingsTab");
 
         this.tabs = Arrays.asList(new Tab[] { newsTab, vanillaPacksTab, featuredPacksTab, packsTab, instancesTab,

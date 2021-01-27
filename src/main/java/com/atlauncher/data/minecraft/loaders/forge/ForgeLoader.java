@@ -1,6 +1,6 @@
 /*
  * ATLauncher - https://github.com/ATLauncher/ATLauncher
- * Copyright (C) 2013-2020 ATLauncher
+ * Copyright (C) 2013-2021 ATLauncher
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -19,6 +19,7 @@ package com.atlauncher.data.minecraft.loaders.forge;
 
 import java.io.File;
 import java.io.FileReader;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -27,8 +28,8 @@ import java.util.stream.Collectors;
 import com.atlauncher.FileSystem;
 import com.atlauncher.Gsons;
 import com.atlauncher.Network;
+import com.atlauncher.constants.Constants;
 import com.atlauncher.data.APIResponse;
-import com.atlauncher.data.Constants;
 import com.atlauncher.data.minecraft.ArgumentRule;
 import com.atlauncher.data.minecraft.Arguments;
 import com.atlauncher.data.minecraft.Library;
@@ -46,6 +47,8 @@ public class ForgeLoader implements Loader {
     protected String installerUrl;
     protected String version;
     protected String rawVersion;
+    protected Long installerSize;
+    protected String installerSha1;
     protected String minecraft;
     protected File tempDir;
     protected InstanceInstaller instanceInstaller;
@@ -61,8 +64,13 @@ public class ForgeLoader implements Loader {
             this.version = versionOverride.version;
             this.rawVersion = versionOverride.rawVersion;
 
-            this.installerUrl = Constants.FORGE_MAVEN + "/" + this.rawVersion + "/forge-" + this.rawVersion
-                    + "-installer.jar";
+            if (versionOverride.size != null) {
+                this.installerSize = versionOverride.size;
+            }
+
+            if (versionOverride.hash != null) {
+                this.installerSha1 = versionOverride.hash;
+            }
         } else if (metadata.containsKey("version")) {
             this.version = (String) metadata.get("version");
             this.rawVersion = this.minecraft + "-" + this.version;
@@ -70,21 +78,29 @@ public class ForgeLoader implements Loader {
             if (metadata.containsKey("rawVersion")) {
                 this.rawVersion = (String) metadata.get("rawVersion");
             }
-
-            this.installerUrl = Constants.FORGE_MAVEN + "/" + this.rawVersion + "/forge-" + this.rawVersion
-                    + "-installer.jar";
         } else if ((boolean) metadata.get("latest")) {
             LogManager.debug("Downloading latest Forge version");
             this.version = this.getLatestVersion();
-            this.installerUrl = Constants.FORGE_MAVEN + "/" + this.minecraft + "-" + this.version
-                    + (this.minecraft.equals("1.10") ? "-1.10.0" : "") + "/forge-" + this.minecraft + "-" + this.version
-                    + (this.minecraft.equals("1.10") ? "-1.10.0" : "") + "-installer.jar";
         } else if ((boolean) metadata.get("recommended")) {
             LogManager.debug("Downloading recommended Forge version");
             this.version = getRecommendedVersion(this.minecraft);
-            this.installerUrl = Constants.FORGE_MAVEN + "/" + this.minecraft + "-" + this.version
-                    + (this.minecraft.equals("1.10") ? "-1.10.0" : "") + "/forge-" + this.minecraft + "-" + this.version
-                    + (this.minecraft.equals("1.10") ? "-1.10.0" : "") + "-installer.jar";
+        }
+
+        this.installerUrl = Constants.DOWNLOAD_SERVER + "/maven/net/minecraftforge/forge/" + this.minecraft + "-"
+                + this.version + "/forge-" + this.minecraft + "-" + this.version + "-installer.jar";
+
+        if (metadata.containsKey("installerSize")) {
+            Object value = metadata.get("installerSize");
+
+            if (value instanceof Double) {
+                this.installerSize = ((Double) metadata.get("installerSize")).longValue();
+            } else if (value instanceof Long) {
+                this.installerSize = (Long) metadata.get("installerSize");
+            }
+        }
+
+        if (metadata.containsKey("installerSha1")) {
+            this.installerSha1 = (String) metadata.get("installerSha1");
         }
     }
 
@@ -122,8 +138,20 @@ public class ForgeLoader implements Loader {
                         FileSystem.LOADERS.resolve("forge-" + this.minecraft + "-" + this.version + "-installer.jar"))
                 .withInstanceInstaller(instanceInstaller).withHttpClient(httpClient).unzipTo(this.tempDir.toPath());
 
+        if (installerSize != null) {
+            download = download.size(this.installerSize);
+        }
+
+        if (installerSha1 != null) {
+            download = download.hash(this.installerSha1);
+        }
+
         if (download.needToDownload()) {
-            instanceInstaller.setTotalBytes(download.getFilesize());
+            if (installerSize != null) {
+                instanceInstaller.setTotalBytes(installerSize);
+            } else {
+                instanceInstaller.setTotalBytes(download.getFilesize());
+            }
         }
 
         download.downloadFile();
@@ -135,7 +163,7 @@ public class ForgeLoader implements Loader {
         ForgeInstallProfile installProfile = getInstallProfile();
 
         if (installProfile.spec != null) {
-            getLibraries().stream().forEach(library -> {
+            getLibraries().forEach(library -> {
                 // copy over any local files from the loader zip file
                 if (library.name.equalsIgnoreCase(installProfile.path)) {
                     FileUtils.copyFile(new File(tempDir, "maven/" + library.downloads.artifact.path).toPath(),
@@ -143,7 +171,7 @@ public class ForgeLoader implements Loader {
                 }
             });
         } else {
-            this.getLibraries().stream().forEach(library -> {
+            this.getLibraries().forEach(library -> {
                 // copy over any local files from the loader zip file
                 if (installProfile.install != null && installProfile.install.filePath != null
                         && library.name.equalsIgnoreCase(installProfile.install.path)) {
@@ -201,12 +229,12 @@ public class ForgeLoader implements Loader {
             libraries = installProfile.getLibraries();
         }
 
-        return libraries.stream().collect(Collectors.toList());
+        return new ArrayList<>(libraries);
     }
 
     @Override
     public Arguments getArguments() {
-        return new Arguments(Arrays.asList(this.getVersionInfo().minecraftArguments.split(" ")).stream()
+        return new Arguments(Arrays.stream(this.getVersionInfo().minecraftArguments.split(" "))
                 .map(arg -> new ArgumentRule(null, arg)).collect(Collectors.toList()));
     }
 
@@ -223,7 +251,7 @@ public class ForgeLoader implements Loader {
 
         Library library = this.getLibraries().stream()
                 .filter(lib -> lib.name.equalsIgnoreCase(this.getInstallProfile().path)).findFirst()
-                .orElse(this.getLibraries().get(this.getLibraries().size() - 1));
+                .orElseGet(() -> this.getLibraries().get(this.getLibraries().size() - 1));
 
         return library.downloads.artifact.path.substring(library.downloads.artifact.path.lastIndexOf('/') + 1);
     }
@@ -245,8 +273,9 @@ public class ForgeLoader implements Loader {
         APIResponse<List<ATLauncherApiForgeVersion>> data = Download.build()
                 .setUrl(String.format("%sforge-versions/%s", Constants.API_BASE_URL, minecraft)).asType(type);
 
-        return data.getData().stream()
-                .map(version -> new LoaderVersion(version.version, version.raw_version, version.recommended, "Forge"))
+        return data
+                .getData().stream().map(version -> new LoaderVersion(version.version, version.rawVersion,
+                        version.recommended, "Forge", version.installerSize, version.installerSha1Hash))
                 .collect(Collectors.toList());
     }
 

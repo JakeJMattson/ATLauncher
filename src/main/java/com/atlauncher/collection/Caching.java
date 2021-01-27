@@ -1,6 +1,6 @@
 /*
  * ATLauncher - https://github.com/ATLauncher/ATLauncher
- * Copyright (C) 2013-2020 ATLauncher
+ * Copyright (C) 2013-2021 ATLauncher
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -23,17 +23,17 @@ import java.util.Map;
 
 public final class Caching {
     public static final int MAX_SIZE = Integer
-            .valueOf(System.getProperty("com.atlauncher.collection.Caching.cacheSize", "127"));
+            .parseInt(System.getProperty("com.atlauncher.collection.Caching.cacheSize", "127"));
 
     private Caching() {
     }
 
-    public static interface Cache<K, V> extends Iterable<Map.Entry<K, V>> {
-        public V get(K key);
+    public interface Cache<K, V> extends Iterable<Map.Entry<K, V>> {
+        V get(K key);
 
-        public V put(K key, V value);
+        V put(K key, V value);
 
-        public int size();
+        int size();
     }
 
     public static <K, V> Cache<K, V> newLRU() {

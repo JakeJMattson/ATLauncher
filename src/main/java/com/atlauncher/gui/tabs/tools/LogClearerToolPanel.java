@@ -1,6 +1,6 @@
 /*
  * ATLauncher - https://github.com/ATLauncher/ATLauncher
- * Copyright (C) 2013-2020 ATLauncher
+ * Copyright (C) 2013-2021 ATLauncher
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -33,13 +33,13 @@ import org.mini2Dx.gettext.GetText;
 
 @SuppressWarnings("serial")
 public class LogClearerToolPanel extends AbstractToolPanel implements ActionListener {
-    private final JLabel INFO_LABEL = new JLabel(new HTMLBuilder().center().split(70).text(GetText.tr(
-            "This tool clears out all logs created by the launcher (not included those made by instances) to free up space and old junk."))
-            .build());
 
     public LogClearerToolPanel() {
         super(GetText.tr("Log Clearer"));
 
+        JLabel INFO_LABEL = new JLabel(new HTMLBuilder().center().split(70).text(GetText.tr(
+            "This tool clears out all logs created by the launcher (not included those made by instances) to free up space and old junk."))
+            .build());
         MIDDLE_PANEL.add(INFO_LABEL);
         BOTTOM_PANEL.add(LAUNCH_BUTTON);
         LAUNCH_BUTTON.addActionListener(this);

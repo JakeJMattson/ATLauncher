@@ -1,6 +1,6 @@
 /*
  * ATLauncher - https://github.com/ATLauncher/ATLauncher
- * Copyright (C) 2013-2020 ATLauncher
+ * Copyright (C) 2013-2021 ATLauncher
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -63,9 +63,8 @@ public class Java {
 
             try {
                 Process process = processBuilder.start();
-                BufferedReader br = new BufferedReader(new InputStreamReader(process.getInputStream()));
-                try {
-                    String line = null;
+                try (BufferedReader br = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+                    String line;
                     Pattern p = Pattern.compile("(java|openjdk) version \"([^\"]*)\"");
 
                     while ((line = br.readLine()) != null) {
@@ -77,8 +76,6 @@ public class Java {
                             break;
                         }
                     }
-                } finally {
-                    br.close();
                 }
             } catch (IOException e) {
                 LogManager.logStackTrace(e);
@@ -242,7 +239,7 @@ public class Java {
 
         JavaInfo systemJava = new JavaInfo(Java.getPathToSystemJavaExecutable());
         if (javas.size() == 0
-                || !javas.stream().anyMatch(java -> java.rootPath.equalsIgnoreCase(systemJava.rootPath))) {
+                || javas.stream().noneMatch(java -> java.rootPath.equalsIgnoreCase(systemJava.rootPath))) {
             javas.add(systemJava);
         }
 
@@ -260,5 +257,22 @@ public class Java {
 
         PerformanceManager.end();
         return javas;
+    }
+
+    public static boolean hasInstalledRuntime() {
+        boolean found = false;
+
+        if (Files.isDirectory(FileSystem.RUNTIMES)) {
+            try (DirectoryStream<Path> directoryStream = Files.newDirectoryStream(FileSystem.RUNTIMES)) {
+                for (Path path : directoryStream) {
+                    if (Files.exists(path.resolve("release"))) {
+                        found = true;
+                    }
+                }
+            } catch (IOException e) {
+            }
+        }
+
+        return found;
     }
 }

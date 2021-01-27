@@ -1,6 +1,6 @@
 /*
  * ATLauncher - https://github.com/ATLauncher/ATLauncher
- * Copyright (C) 2013-2020 ATLauncher
+ * Copyright (C) 2013-2021 ATLauncher
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -52,18 +52,18 @@ import io.github.asyncronous.toast.Toaster;
 
 public class ModsChooser extends JDialog {
     private static final long serialVersionUID = -5309108183485463434L;
-    private InstanceInstaller installer;
-    private JButton useShareCode;
-    private JButton selectAllButton;
-    private JButton clearAllButton;
-    private JButton installButton;
+    private final InstanceInstaller installer;
+    private final JButton useShareCode;
+    private final JButton selectAllButton;
+    private final JButton clearAllButton;
+    private final JButton installButton;
     private List<ModsJCheckBox> modCheckboxes;
     private List<ModsJCheckBox> sortedOut;
 
     private boolean wasClosed = false;
 
     public ModsChooser(InstanceInstaller installerr) {
-        super(App.launcher.getParent(), GetText.tr("Select Mods To Install"), ModalityType.APPLICATION_MODAL);
+        super(App.launcher.getParent(), GetText.tr("Select Mods To Install"), ModalityType.DOCUMENT_MODAL);
         this.installer = installerr;
 
         Analytics.sendScreenView("Mods Chooser Dialog");

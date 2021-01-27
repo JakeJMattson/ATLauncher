@@ -1,6 +1,6 @@
 /*
  * ATLauncher - https://github.com/ATLauncher/ATLauncher
- * Copyright (C) 2013-2020 ATLauncher
+ * Copyright (C) 2013-2021 ATLauncher
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -29,17 +29,18 @@ import org.mini2Dx.gettext.GetText;
 
 @SuppressWarnings("serial")
 public class BackupsSettingsTab extends AbstractSettingsTab {
-    private JLabelWithHover enableModsBackupsLabel;
-    private JCheckBox enableModsBackups;
+    private final JCheckBox enableModsBackups;
+    private final JCheckBox enableAutomaticBackupAfterLaunch;
 
     public BackupsSettingsTab() {
         // Enable mods backups
+
         gbc.gridx = 0;
         gbc.gridy++;
         gbc.insets = UIConstants.LABEL_INSETS;
         gbc.anchor = GridBagConstraints.BASELINE_TRAILING;
-        enableModsBackupsLabel = new JLabelWithHover(GetText.tr("Enable Mods Backups") + "?", HELP_ICON,
-                GetText.tr("If we should backup mods when creating a backup for an instance."));
+        JLabelWithHover enableModsBackupsLabel = new JLabelWithHover(GetText.tr("Enable Mods Backups") + "?", HELP_ICON,
+                GetText.tr("If mods should be backed up when creating a backup for an instance."));
         add(enableModsBackupsLabel, gbc);
 
         gbc.gridx++;
@@ -48,10 +49,29 @@ public class BackupsSettingsTab extends AbstractSettingsTab {
         enableModsBackups = new JCheckBox();
         enableModsBackups.setSelected(App.settings.enableModsBackups);
         add(enableModsBackups, gbc);
+
+        // Enable automatic backup after launch
+
+        gbc.gridx = 0;
+        gbc.gridy++;
+        gbc.insets = UIConstants.LABEL_INSETS;
+        gbc.anchor = GridBagConstraints.BASELINE_TRAILING;
+        JLabelWithHover enableAutomaticBackupAfterLaunchLabel = new JLabelWithHover(
+                GetText.tr("Enable Automatic Backup After Launch") + "?", HELP_ICON,
+                GetText.tr("If a backup should run after launching an instance."));
+        add(enableAutomaticBackupAfterLaunchLabel, gbc);
+
+        gbc.gridx++;
+        gbc.insets = UIConstants.CHECKBOX_FIELD_INSETS;
+        gbc.anchor = GridBagConstraints.BASELINE_LEADING;
+        enableAutomaticBackupAfterLaunch = new JCheckBox();
+        enableAutomaticBackupAfterLaunch.setSelected(App.settings.enableAutomaticBackupAfterLaunch);
+        add(enableAutomaticBackupAfterLaunch, gbc);
     }
 
     public void save() {
         App.settings.enableModsBackups = enableModsBackups.isSelected();
+        App.settings.enableAutomaticBackupAfterLaunch = enableAutomaticBackupAfterLaunch.isSelected();
     }
 
     @Override

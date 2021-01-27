@@ -1,6 +1,6 @@
 /*
  * ATLauncher - https://github.com/ATLauncher/ATLauncher
- * Copyright (C) 2013-2020 ATLauncher
+ * Copyright (C) 2013-2021 ATLauncher
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -29,7 +29,7 @@ import javax.swing.JPanel;
 
 import com.atlauncher.App;
 import com.atlauncher.builders.HTMLBuilder;
-import com.atlauncher.data.Constants;
+import com.atlauncher.constants.Constants;
 import com.atlauncher.evnt.listener.RelocalizationListener;
 import com.atlauncher.evnt.manager.RelocalizationManager;
 import com.atlauncher.managers.DialogManager;
@@ -42,8 +42,6 @@ import org.mini2Dx.gettext.GetText;
 @SuppressWarnings("serial")
 public class ConsoleBottomBar extends BottomBar implements RelocalizationListener {
 
-    private final JPanel leftSide = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 13));
-
     private final JButton clearButton = new JButton(GetText.tr("Clear"));
     private final JButton copyLogButton = new JButton(GetText.tr("Copy Log"));
     private final JButton uploadLogButton = new JButton(GetText.tr("Upload Log"));
@@ -52,14 +50,15 @@ public class ConsoleBottomBar extends BottomBar implements RelocalizationListene
     public ConsoleBottomBar() {
         this.addActionListeners(); // Setup Action Listeners
 
-        this.leftSide.add(this.clearButton);
-        this.leftSide.add(this.copyLogButton);
-        this.leftSide.add(this.uploadLogButton);
-        this.leftSide.add(this.killMinecraftButton);
+        JPanel leftSide = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 13));
+        leftSide.add(this.clearButton);
+        leftSide.add(this.copyLogButton);
+        leftSide.add(this.uploadLogButton);
+        leftSide.add(this.killMinecraftButton);
 
         this.killMinecraftButton.setVisible(false);
 
-        this.add(this.leftSide, BorderLayout.WEST);
+        this.add(leftSide, BorderLayout.WEST);
 
         RelocalizationManager.addListener(this);
     }

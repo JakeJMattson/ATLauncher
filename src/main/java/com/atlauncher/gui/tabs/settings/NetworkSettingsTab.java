@@ -1,6 +1,6 @@
 /*
  * ATLauncher - https://github.com/ATLauncher/ATLauncher
- * Copyright (C) 2013-2020 ATLauncher
+ * Copyright (C) 2013-2021 ATLauncher
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -42,22 +42,22 @@ import org.mini2Dx.gettext.GetText;
 
 @SuppressWarnings("serial")
 public class NetworkSettingsTab extends AbstractSettingsTab implements RelocalizationListener {
-    private JLabelWithHover concurrentConnectionsLabel;
-    private JSpinner concurrentConnections;
+    private final JLabelWithHover concurrentConnectionsLabel;
+    private final JSpinner concurrentConnections;
 
-    private JLabelWithHover connectionTimeoutLabel;
-    private JSpinner connectionTimeout;
+    private final JLabelWithHover connectionTimeoutLabel;
+    private final JSpinner connectionTimeout;
 
-    private JLabelWithHover enableProxyLabel;
-    private JCheckBox enableProxy;
+    private final JLabelWithHover enableProxyLabel;
+    private final JCheckBox enableProxy;
 
-    private JLabelWithHover proxyHostLabel;
+    private final JLabelWithHover proxyHostLabel;
     private JTextField proxyHost;
 
-    private JLabelWithHover proxyPortLabel;
+    private final JLabelWithHover proxyPortLabel;
     private JSpinner proxyPort;
 
-    private JLabelWithHover proxyTypeLabel;
+    private final JLabelWithHover proxyTypeLabel;
     private JComboBox<String> proxyType;
 
     public NetworkSettingsTab() {
@@ -212,7 +212,7 @@ public class NetworkSettingsTab extends AbstractSettingsTab implements Relocaliz
         }
 
         final Type theType = type;
-        final ProgressDialog dialog = new ProgressDialog(GetText.tr("Checking Proxy"), 0,
+        final ProgressDialog<Boolean> dialog = new ProgressDialog<>(GetText.tr("Checking Proxy"), 0,
                 GetText.tr("Checking the proxy entered."), "Cancelled Proxy Test!");
         dialog.addThread(new Thread(() -> {
             dialog.setReturnValue(Utils.testProxy(
@@ -225,7 +225,7 @@ public class NetworkSettingsTab extends AbstractSettingsTab implements Relocaliz
             return false;
         }
 
-        if (!(Boolean) dialog.getReturnValue()) {
+        if (!dialog.getReturnValue()) {
             DialogManager.okDialog().setTitle(GetText.tr("Help"))
                     .setContent(GetText.tr("Cannot connect to proxy. Please check the settings and try again."))
                     .setType(DialogManager.ERROR).show();

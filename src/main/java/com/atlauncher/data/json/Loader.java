@@ -1,6 +1,6 @@
 /*
  * ATLauncher - https://github.com/ATLauncher/ATLauncher
- * Copyright (C) 2013-2020 ATLauncher
+ * Copyright (C) 2013-2021 ATLauncher
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -62,10 +62,10 @@ public class Loader {
     }
 
     public com.atlauncher.data.minecraft.loaders.Loader getLoader(File tempDir, InstanceInstaller instanceInstaller,
-            LoaderVersion loaderVersion) throws InstantiationException, IllegalAccessException, ClassNotFoundException {
+            LoaderVersion loaderVersion) throws Exception {
         com.atlauncher.data.minecraft.loaders.Loader instance = (com.atlauncher.data.minecraft.loaders.Loader) Class
                 .forName(this.className.replace("com.atlauncher.data.loaders", "com.atlauncher.data.minecraft.loaders"))
-                .newInstance();
+                .getDeclaredConstructor().newInstance();
 
         instance.set(this.metadata, tempDir, instanceInstaller, loaderVersion);
 

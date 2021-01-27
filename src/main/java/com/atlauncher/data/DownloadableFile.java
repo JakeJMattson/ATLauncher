@@ -1,6 +1,6 @@
 /*
  * ATLauncher - https://github.com/ATLauncher/ATLauncher
- * Copyright (C) 2013-2020 ATLauncher
+ * Copyright (C) 2013-2021 ATLauncher
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -18,6 +18,7 @@
 package com.atlauncher.data;
 
 import com.atlauncher.FileSystem;
+import com.atlauncher.constants.Constants;
 import com.atlauncher.network.Download;
 import com.atlauncher.utils.OS;
 
@@ -53,10 +54,10 @@ public class DownloadableFile {
         }
 
         if (arch != null) {
-            return (arch.equalsIgnoreCase("arm64") && (!OS.is64Bit() || !OS.isArm()))
-                    || (arch.equalsIgnoreCase("arm") && (OS.is64Bit() || !OS.isArm()))
-                    || (arch.equalsIgnoreCase("x86") && !OS.is64Bit())
-                    || (arch.equalsIgnoreCase("x64") && OS.is64Bit());
+            return (arch.equalsIgnoreCase("arm64") && (OS.is64Bit() && OS.isArm()))
+                    || (arch.equalsIgnoreCase("arm") && (!OS.is64Bit() && OS.isArm()))
+                    || (arch.equalsIgnoreCase("x86") && (!OS.is64Bit() && !OS.isArm()))
+                    || (arch.equalsIgnoreCase("x64") && (OS.is64Bit() && !OS.isArm()));
         }
 
         return true;

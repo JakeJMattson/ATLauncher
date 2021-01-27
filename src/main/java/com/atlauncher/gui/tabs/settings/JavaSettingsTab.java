@@ -1,6 +1,6 @@
 /*
  * ATLauncher - https://github.com/ATLauncher/ATLauncher
- * Copyright (C) 2013-2020 ATLauncher
+ * Copyright (C) 2013-2021 ATLauncher
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -38,8 +38,8 @@ import javax.swing.SpinnerNumberModel;
 
 import com.atlauncher.App;
 import com.atlauncher.builders.HTMLBuilder;
+import com.atlauncher.constants.Constants;
 import com.atlauncher.constants.UIConstants;
-import com.atlauncher.data.Constants;
 import com.atlauncher.evnt.listener.RelocalizationListener;
 import com.atlauncher.evnt.listener.SettingsListener;
 import com.atlauncher.evnt.manager.RelocalizationManager;
@@ -54,37 +54,32 @@ import org.mini2Dx.gettext.GetText;
 
 @SuppressWarnings("serial")
 public class JavaSettingsTab extends AbstractSettingsTab implements RelocalizationListener, SettingsListener {
-    private JLabelWithHover initialMemoryLabel;
-    private JSpinner initialMemory;
-    private JLabelWithHover initialMemoryLabelWarning;
+    private final JLabelWithHover initialMemoryLabel;
+    private final JSpinner initialMemory;
+    private final JLabelWithHover initialMemoryLabelWarning;
 
-    private JPanel initialMemoryPanel;
-    private JLabelWithHover maximumMemoryLabel;
-    private JSpinner maximumMemory;
-    private JPanel maximumMemoryPanel;
+    private final JLabelWithHover maximumMemoryLabel;
+    private final JSpinner maximumMemory;
 
-    private JLabelWithHover permGenLabel;
-    private JSpinner permGen;
+    private final JLabelWithHover permGenLabel;
+    private final JSpinner permGen;
 
-    private JPanel windowSizePanel;
-    private JLabelWithHover windowSizeLabel;
-    private JSpinner widthField;
-    private JSpinner heightField;
-    private JComboBox<String> commonScreenSizes;
-    private JPanel javaPathPanel;
-    private JLabelWithHover javaPathLabel;
+    private final JLabelWithHover windowSizeLabel;
+    private final JSpinner widthField;
+    private final JSpinner heightField;
+    private final JComboBox<String> commonScreenSizes;
+    private final JLabelWithHover javaPathLabel;
     private JTextField javaPath;
-    private JComboBox<JavaInfo> installedJavas;
-    private JButton javaPathResetButton;
-    private JButton javaBrowseButton;
-    private JPanel javaParametersPanel;
-    private JLabelWithHover javaParametersLabel;
-    private JTextArea javaParameters;
-    private JButton javaParametersResetButton;
-    private JLabelWithHover startMinecraftMaximisedLabel;
-    private JCheckBox startMinecraftMaximised;
-    private JLabelWithHover ignoreJavaOnInstanceLaunchLabel;
-    private JCheckBox ignoreJavaOnInstanceLaunch;
+    private final JComboBox<JavaInfo> installedJavas;
+    private final JButton javaPathResetButton;
+    private final JButton javaBrowseButton;
+    private final JLabelWithHover javaParametersLabel;
+    private final JTextArea javaParameters;
+    private final JButton javaParametersResetButton;
+    private final JLabelWithHover startMinecraftMaximisedLabel;
+    private final JCheckBox startMinecraftMaximised;
+    private final JLabelWithHover ignoreJavaOnInstanceLaunchLabel;
+    private final JCheckBox ignoreJavaOnInstanceLaunch;
 
     public JavaSettingsTab() {
         int systemRam = OS.getSystemRam();
@@ -107,7 +102,7 @@ public class JavaSettingsTab extends AbstractSettingsTab implements Relocalizati
                         "Initial memory/ram is the starting amount of memory/ram to use when starting Minecraft. This should be left at the default of 512 MB unless you know what your doing."))
                         .build());
 
-        initialMemoryPanel = new JPanel();
+        JPanel initialMemoryPanel = new JPanel();
         initialMemoryPanel.setLayout(new FlowLayout(FlowLayout.RIGHT, 0, 0));
         if (!OS.is64Bit()) {
             initialMemoryPanel.add(initialMemoryLabelWarning);
@@ -138,7 +133,7 @@ public class JavaSettingsTab extends AbstractSettingsTab implements Relocalizati
                         .build());
         add(maximumMemoryLabel, gbc);
 
-        maximumMemoryPanel = new JPanel();
+        JPanel maximumMemoryPanel = new JPanel();
         maximumMemoryPanel.setLayout(new FlowLayout(FlowLayout.RIGHT, 0, 0));
         if (!OS.is64Bit()) {
             maximumMemoryPanel.add(new JLabelWithHover(WARNING_ICON, new HTMLBuilder().center().split(100).text(GetText
@@ -192,7 +187,7 @@ public class JavaSettingsTab extends AbstractSettingsTab implements Relocalizati
         gbc.insets = UIConstants.FIELD_INSETS;
         gbc.anchor = GridBagConstraints.BASELINE_LEADING;
 
-        windowSizePanel = new JPanel();
+        JPanel windowSizePanel = new JPanel();
         windowSizePanel.setLayout(new BoxLayout(windowSizePanel, BoxLayout.X_AXIS));
 
         SpinnerNumberModel widthModel = new SpinnerNumberModel(App.settings.windowWidth, 1, OS.getMaximumWindowWidth(),
@@ -207,16 +202,13 @@ public class JavaSettingsTab extends AbstractSettingsTab implements Relocalizati
 
         commonScreenSizes = new JComboBox<>();
         commonScreenSizes.addItem("Select An Option");
-        commonScreenSizes.addItem("854x480");
 
-        if (OS.getMaximumWindowWidth() >= 1280 && OS.getMaximumWindowHeight() >= 720) {
-            commonScreenSizes.addItem("1280x720");
-        }
-        if (OS.getMaximumWindowWidth() >= 1600 && OS.getMaximumWindowHeight() >= 900) {
-            commonScreenSizes.addItem("1600x900");
-        }
-        if (OS.getMaximumWindowWidth() >= 1920 && OS.getMaximumWindowHeight() >= 1080) {
-            commonScreenSizes.addItem("1920x1080");
+        for (String screenSize : Constants.SCREEN_RESOLUTIONS) {
+            String[] size = screenSize.split("x");
+            if (OS.getMaximumWindowWidth() >= Integer.parseInt(size[0])
+                    && OS.getMaximumWindowHeight() >= Integer.parseInt(size[1])) {
+                commonScreenSizes.addItem(screenSize);
+            }
         }
         commonScreenSizes.addActionListener(e -> {
             String selected = (String) commonScreenSizes.getSelectedItem();
@@ -255,7 +247,7 @@ public class JavaSettingsTab extends AbstractSettingsTab implements Relocalizati
         gbc.gridx++;
         gbc.insets = UIConstants.LABEL_INSETS;
         gbc.anchor = GridBagConstraints.BASELINE_LEADING;
-        javaPathPanel = new JPanel();
+        JPanel javaPathPanel = new JPanel();
         javaPathPanel.setLayout(new BoxLayout(javaPathPanel, BoxLayout.Y_AXIS));
 
         JPanel javaPathPanelTop = new JPanel();
@@ -267,7 +259,7 @@ public class JavaSettingsTab extends AbstractSettingsTab implements Relocalizati
         installedJavas = new JComboBox<>();
         installedJavas.setPreferredSize(new Dimension(516, 24));
         if (Java.getInstalledJavas().size() != 0) {
-            Java.getInstalledJavas().stream().forEach(installedJavas::addItem);
+            Java.getInstalledJavas().forEach(installedJavas::addItem);
 
             installedJavas.setSelectedItem(Java.getInstalledJavas().stream()
                     .filter(javaInfo -> javaInfo.rootPath.equalsIgnoreCase(App.settings.javaPath)).findFirst()
@@ -325,7 +317,7 @@ public class JavaSettingsTab extends AbstractSettingsTab implements Relocalizati
         gbc.insets = UIConstants.LABEL_INSETS;
         gbc.anchor = GridBagConstraints.FIRST_LINE_START;
 
-        javaParametersPanel = new JPanel();
+        JPanel javaParametersPanel = new JPanel();
         javaParametersPanel.setLayout(new BoxLayout(javaParametersPanel, BoxLayout.X_AXIS));
         javaParametersPanel.setAlignmentY(Component.TOP_ALIGNMENT);
 
@@ -373,7 +365,7 @@ public class JavaSettingsTab extends AbstractSettingsTab implements Relocalizati
         gbc.gridy++;
         gbc.insets = UIConstants.LABEL_INSETS;
         gbc.anchor = GridBagConstraints.BASELINE_TRAILING;
-        ignoreJavaOnInstanceLaunchLabel = new JLabelWithHover(GetText.tr("Ignore Java checks On Launch") + "?",
+        ignoreJavaOnInstanceLaunchLabel = new JLabelWithHover(GetText.tr("Ignore Java Checks On Launch") + "?",
                 HELP_ICON, GetText.tr(
                         "This enables ignoring errors when launching a pack that you don't have a compatable Java version for."));
         add(ignoreJavaOnInstanceLaunchLabel, gbc);

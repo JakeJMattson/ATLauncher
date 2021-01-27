@@ -1,6 +1,6 @@
 /*
  * ATLauncher - https://github.com/ATLauncher/ATLauncher
- * Copyright (C) 2013-2020 ATLauncher
+ * Copyright (C) 2013-2021 ATLauncher
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -17,11 +17,19 @@
  */
 package com.atlauncher;
 
+import java.security.cert.CertificateException;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import com.atlauncher.data.Constants;
+import javax.net.ssl.HostnameVerifier;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLSession;
+import javax.net.ssl.SSLSocketFactory;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.X509TrustManager;
+
+import com.atlauncher.constants.Constants;
 import com.atlauncher.interfaces.NetworkProgressable;
 import com.atlauncher.listener.ProgressListener;
 import com.atlauncher.network.DebugLoggingInterceptor;
@@ -46,8 +54,8 @@ public final class Network {
     public static OkHttpClient CACHED_CLIENT = CLIENT.newBuilder().cache(CACHE).build();
 
     public static final String USER_AGENT = "Mozilla/5.0 (Windows NT 6.2; WOW64) AppleWebKit/537.36 (KHTML, like "
-            + "Gecko) Chrome/28.0.1500.72 Safari/537.36 " + Constants.LAUNCHER_NAME + "/" + Constants.VERSION + " Java/"
-            + Java.getLauncherJavaVersion();
+            + "Gecko) Chrome/28.0.1500.72 Safari/537.36 " + Constants.LAUNCHER_NAME + "/"
+            + Constants.VERSION.toStringForLogging() + " Java/" + Java.getLauncherJavaVersion();
 
     static {
         Logger.getLogger(OkHttpClient.class.getName()).setLevel(Level.FINE);
@@ -75,5 +83,51 @@ public final class Network {
             return originalResponse.newBuilder()
                     .body(new ProgressResponseBody(originalResponse.body(), progressListener)).build();
         }).build();
+    }
+
+    public static void allowAllSslCerts() {
+        try {
+            final TrustManager[] trustAllCerts = new TrustManager[] { new X509TrustManager() {
+
+                @Override
+                public void checkClientTrusted(java.security.cert.X509Certificate[] chain, String authType)
+                        throws CertificateException {
+                }
+
+                @Override
+                public void checkServerTrusted(java.security.cert.X509Certificate[] chain, String authType)
+                        throws CertificateException {
+                }
+
+                @Override
+                public java.security.cert.X509Certificate[] getAcceptedIssuers() {
+                    return new java.security.cert.X509Certificate[] {};
+                }
+            } };
+
+            final SSLContext sslContext = SSLContext.getInstance("SSL");
+            sslContext.init(null, trustAllCerts, new java.security.SecureRandom());
+
+            final SSLSocketFactory sslSocketFactory = sslContext.getSocketFactory();
+
+            CLIENT = CLIENT.newBuilder().sslSocketFactory(sslSocketFactory, (X509TrustManager) trustAllCerts[0])
+                    .hostnameVerifier(new HostnameVerifier() {
+                        @Override
+                        public boolean verify(String hostname, SSLSession session) {
+                            return true;
+                        }
+                    }).build();
+
+            CACHED_CLIENT = CACHED_CLIENT.newBuilder()
+                    .sslSocketFactory(sslSocketFactory, (X509TrustManager) trustAllCerts[0])
+                    .hostnameVerifier(new HostnameVerifier() {
+                        @Override
+                        public boolean verify(String hostname, SSLSession session) {
+                            return true;
+                        }
+                    }).build();
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 }

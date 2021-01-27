@@ -1,6 +1,6 @@
 /*
  * ATLauncher - https://github.com/ATLauncher/ATLauncher
- * Copyright (C) 2013-2020 ATLauncher
+ * Copyright (C) 2013-2021 ATLauncher
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -17,8 +17,18 @@
  */
 package com.atlauncher.data.minecraft.loaders.forge;
 
+import com.google.gson.annotations.SerializedName;
+
 public class ATLauncherApiForgeVersion {
     public String version;
     public boolean recommended;
-    public String raw_version;
+
+    @SerializedName("raw_version")
+    public String rawVersion;
+
+    @SerializedName("installer_sha1_hash")
+    public String installerSha1Hash;
+
+    @SerializedName("installer_size")
+    public Long installerSize;
 }

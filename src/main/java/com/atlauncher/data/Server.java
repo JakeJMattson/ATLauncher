@@ -1,6 +1,6 @@
 /*
  * ATLauncher - https://github.com/ATLauncher/ATLauncher
- * Copyright (C) 2013-2020 ATLauncher
+ * Copyright (C) 2013-2021 ATLauncher
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -45,12 +45,6 @@ import org.mini2Dx.gettext.GetText;
 
 @Json
 public class Server {
-    @SuppressWarnings("unused")
-    private String launcher = Constants.LAUNCHER_NAME;
-
-    @SuppressWarnings("unused")
-    private String launcherVersion = Constants.VERSION.toString();
-
     public String name;
     public String pack;
     public Integer packId;
@@ -200,9 +194,9 @@ public class Server {
 
         if (instancesImage.exists()) {
             return Utils.getIconImage(instancesImage);
-        } else {
-            return Utils.getIconImage(FileSystem.IMAGES.resolve("defaultimage.png").toFile());
         }
+
+        return Utils.getIconImage("/assets/image/DefaultPackImage.png");
     }
 
     public void save() {

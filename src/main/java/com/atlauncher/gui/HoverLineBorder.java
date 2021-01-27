@@ -1,6 +1,6 @@
 /*
  * ATLauncher - https://github.com/ATLauncher/ATLauncher
- * Copyright (C) 2013-2020 ATLauncher
+ * Copyright (C) 2013-2021 ATLauncher
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -25,7 +25,7 @@ import javax.swing.border.LineBorder;
 
 @SuppressWarnings("serial")
 public class HoverLineBorder extends LineBorder {
-    private int insets = 0;
+    private final int insets;
 
     public HoverLineBorder() {
         super(UIManager.getColor("HoverLineBorder.borderColor"), (int) UIManager.get("HoverLineBorder.borderWidth"));

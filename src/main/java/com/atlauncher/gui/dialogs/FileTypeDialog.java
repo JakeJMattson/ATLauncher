@@ -1,6 +1,6 @@
 /*
  * ATLauncher - https://github.com/ATLauncher/ATLauncher
- * Copyright (C) 2013-2020 ATLauncher
+ * Copyright (C) 2013-2021 ATLauncher
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -35,19 +35,13 @@ import com.atlauncher.App;
 
 @SuppressWarnings("serial")
 public class FileTypeDialog extends JDialog {
-    private JPanel top;
-    private JPanel middle;
-    private JPanel bottom;
 
-    private JLabel selectorLabel;
-    private JComboBox<String> selector;
-
-    private JButton bottomButton;
+    private final JComboBox<String> selector;
 
     private boolean closed = false;
 
     public FileTypeDialog(String title, String labelName, String bottomText, String selectorText, String[] subOptions) {
-        super(App.launcher.getParent(), title, ModalityType.APPLICATION_MODAL);
+        super(App.launcher.getParent(), title, ModalityType.DOCUMENT_MODAL);
         setSize(400, 175);
         setLocationRelativeTo(null);
         setLayout(new BorderLayout());
@@ -55,18 +49,18 @@ public class FileTypeDialog extends JDialog {
         setResizable(false);
 
         // Top Panel Stuff
-        top = new JPanel();
+        JPanel top = new JPanel();
         top.add(new JLabel(labelName));
 
         // Middle Panel Stuff
-        middle = new JPanel();
+        JPanel middle = new JPanel();
         middle.setLayout(new GridBagLayout());
         GridBagConstraints gbc = new GridBagConstraints();
 
         gbc.gridx = 0;
         gbc.gridy = 0;
         gbc.anchor = GridBagConstraints.BASELINE_TRAILING;
-        selectorLabel = new JLabel(selectorText + ": ");
+        JLabel selectorLabel = new JLabel(selectorText + ": ");
         middle.add(selectorLabel, gbc);
 
         gbc.gridx++;
@@ -78,9 +72,9 @@ public class FileTypeDialog extends JDialog {
         middle.add(selector, gbc);
 
         // Bottom Panel Stuff
-        bottom = new JPanel();
+        JPanel bottom = new JPanel();
         bottom.setLayout(new FlowLayout());
-        bottomButton = new JButton(bottomText);
+        JButton bottomButton = new JButton(bottomText);
         bottomButton.addActionListener(e -> close());
         bottom.add(bottomButton);
 

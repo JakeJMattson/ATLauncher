@@ -49,7 +49,7 @@ If you want to run the launcher while developing with it, you can use your IDE (
 Alternatively you can run:
 
 ```sh
-./gradlew run --args="--debug --debug-level 3 --working-dir=test"
+./gradlew run --args="--debug --debug-level 3 --working-dir=testLauncher"
 ```
 
 ## Using VSCode
@@ -127,10 +127,17 @@ in order for the theme to work exactly right.
 
 For an example, see the `DraculaContrast` theme which uses this method.
 
+### Tools To Help Theme Development
+
+To help with theme development, with the launcher running (not in the release version, only in development), you can
+press `Ctrl + Shift + Alt + X` to bring up a tool to highlight UI components to see their properties. You can also press
+`Ctrl + Shift + Alt + Y` to bring up a list of all the default properties in the UIManager. These values can be modified
+in your `.properties` file.
+
 ## Plugging In Your Data
 
 To get started with the code and plug in your own data, you need to edit the
-`/src/main/java/com/atlauncher/data/Constants.java` file.
+`/src/main/java/com/atlauncher/constants/Constants.java` file.
 
 By using this source code you don't get permissions to use our CDN/files/assets/modpacks. See the License section at the
 bottom for more.
@@ -233,10 +240,11 @@ need to take.
 First grab the built project from Crowdin, and then grab out the translation to add/update. For this example, let's take
 German.
 
-Pop this file in the `processTranslations/in` directory and then run the `processTranslations.bat` or
-`processTranslations.sh` file to fix them up and output them into the `processTranslations/out` directory.
+Pop this file in the `scripts/processTranslations/in` directory and then run the `scripts/processTranslations.bat` or
+`scripts/processTranslations.sh` file to fix them up and output them into the `scripts/processTranslations/out`
+directory.
 
-Now take the converted files from the `processTranslations/out` directory and put them in the
+Now take the converted files from the `scripts/processTranslations/out` directory and put them in the
 `src\main\resources\assets\lang` directory.
 
 Now open `src\main\java\com\atlauncher\data\Language.java` and in the static block at the top, add in the language:

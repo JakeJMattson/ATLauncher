@@ -1,6 +1,6 @@
 /*
  * ATLauncher - https://github.com/ATLauncher/ATLauncher
- * Copyright (C) 2013-2020 ATLauncher
+ * Copyright (C) 2013-2021 ATLauncher
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -17,8 +17,15 @@
  */
 package com.atlauncher;
 
+import java.util.Date;
+
+import com.atlauncher.data.AbstractAccount;
+import com.atlauncher.data.AccountTypeAdapter;
+import com.atlauncher.data.DateTypeAdapter;
 import com.atlauncher.data.PackVersion;
 import com.atlauncher.data.PackVersionTypeAdapter;
+import com.atlauncher.data.microsoft.OauthTokenResponse;
+import com.atlauncher.data.microsoft.OauthTokenResponseTypeAdapter;
 import com.atlauncher.data.minecraft.Arguments;
 import com.atlauncher.data.minecraft.ArgumentsTypeAdapter;
 import com.atlauncher.data.minecraft.Library;
@@ -31,7 +38,11 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 
 public final class Gsons {
-    public static final Gson DEFAULT = new GsonBuilder().setPrettyPrinting().create();
+    public static final Gson DEFAULT = new GsonBuilder()
+            .registerTypeAdapter(AbstractAccount.class, new AccountTypeAdapter())
+            .registerTypeAdapter(Date.class, new DateTypeAdapter())
+            .registerTypeAdapter(OauthTokenResponse.class, new OauthTokenResponseTypeAdapter()).setPrettyPrinting()
+            .create();
 
     public static final Gson DEFAULT_ALT = new GsonBuilder()
             .registerTypeAdapter(PackVersion.class, new PackVersionTypeAdapter()).setPrettyPrinting().create();

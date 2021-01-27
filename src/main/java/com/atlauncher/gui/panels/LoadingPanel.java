@@ -1,6 +1,6 @@
 /*
  * ATLauncher - https://github.com/ATLauncher/ATLauncher
- * Copyright (C) 2013-2020 ATLauncher
+ * Copyright (C) 2013-2021 ATLauncher
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -31,6 +31,10 @@ import org.mini2Dx.gettext.GetText;
 @SuppressWarnings("serial")
 public class LoadingPanel extends JPanel {
     public LoadingPanel() {
+        this(GetText.tr("Loading..."));
+    }
+
+    public LoadingPanel(String text) {
         setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
 
         ImageIcon imageIcon = Utils.getIconImage("/assets/image/LoadingBars.gif");
@@ -41,7 +45,7 @@ public class LoadingPanel extends JPanel {
         iconLabel.setIcon(imageIcon);
         imageIcon.setImageObserver(iconLabel);
 
-        JLabel label = new JLabel(GetText.tr("Loading") + "...");
+        JLabel label = new JLabel(text);
         label.setAlignmentX(Component.CENTER_ALIGNMENT);
         label.setAlignmentY(Component.CENTER_ALIGNMENT);
 

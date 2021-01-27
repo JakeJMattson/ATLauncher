@@ -1,6 +1,6 @@
 /*
  * ATLauncher - https://github.com/ATLauncher/ATLauncher
- * Copyright (C) 2013-2020 ATLauncher
+ * Copyright (C) 2013-2021 ATLauncher
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -22,7 +22,6 @@ import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Set;
@@ -51,6 +50,7 @@ public class PackManager {
     public static void loadPacks() {
         PerformanceManager.start();
         LogManager.debug("Loading packs");
+        Data.PACKS.clear();
         try {
             java.lang.reflect.Type type = new TypeToken<List<Pack>>() {
             }.getType();
@@ -124,18 +124,15 @@ public class PackManager {
     }
 
     public static void setPackVisbility(Pack pack, boolean collapsed) {
-        if (pack != null && AccountManager.getSelectedAccount() != null
-                && AccountManager.getSelectedAccount().isReal()) {
+        if (pack != null && AccountManager.getSelectedAccount() != null) {
             if (collapsed) {
                 // Closed It
-                if (!AccountManager.getSelectedAccount().getCollapsedPacks().contains(pack.getName())) {
-                    AccountManager.getSelectedAccount().getCollapsedPacks().add(pack.getName());
+                if (!AccountManager.getSelectedAccount().collapsedPacks.contains(pack.getName())) {
+                    AccountManager.getSelectedAccount().collapsedPacks.add(pack.getName());
                 }
             } else {
                 // Opened It
-                if (AccountManager.getSelectedAccount().getCollapsedPacks().contains(pack.getName())) {
-                    AccountManager.getSelectedAccount().getCollapsedPacks().remove(pack.getName());
-                }
+                AccountManager.getSelectedAccount().collapsedPacks.remove(pack.getName());
             }
             AccountManager.saveAccounts();
             App.launcher.reloadVanillaPacksPanel();
@@ -298,9 +295,7 @@ public class PackManager {
         PerformanceManager.start();
         File[] files = FileSystem.IMAGES.toFile().listFiles();
 
-        Set<String> packImageFilenames = new HashSet<>();
-        packImageFilenames.addAll(
-                Data.PACKS.stream().map(p -> p.getSafeName().toLowerCase() + ".png").collect(Collectors.toList()));
+        Set<String> packImageFilenames = Data.PACKS.stream().map(p -> p.getSafeName().toLowerCase() + ".png").collect(Collectors.toSet());
         packImageFilenames.add("defaultimage.png");
 
         if (files != null) {

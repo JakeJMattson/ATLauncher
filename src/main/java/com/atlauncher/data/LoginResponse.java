@@ -1,6 +1,6 @@
 /*
  * ATLauncher - https://github.com/ATLauncher/ATLauncher
- * Copyright (C) 2013-2020 ATLauncher
+ * Copyright (C) 2013-2021 ATLauncher
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -25,7 +25,7 @@ public class LoginResponse {
     private boolean hasError;
     private String errorMessage;
     private UserAuthentication auth;
-    private String username;
+    private final String username;
 
     public LoginResponse(String username) {
         this.offline = false;
@@ -91,10 +91,10 @@ public class LoginResponse {
     }
 
     public void save() {
-        Account account = AccountManager.getAccountByName(this.username);
+        MojangAccount account = (MojangAccount) AccountManager.getAccountByName(this.username);
 
         if (account != null) {
-            account.setStore(this.auth.saveForStorage());
+            account.store = this.auth.saveForStorage();
         }
     }
 }

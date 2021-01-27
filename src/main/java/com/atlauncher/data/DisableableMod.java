@@ -1,6 +1,6 @@
 /*
  * ATLauncher - https://github.com/ATLauncher/ATLauncher
- * Copyright (C) 2013-2020 ATLauncher
+ * Copyright (C) 2013-2021 ATLauncher
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -18,29 +18,31 @@
 package com.atlauncher.data;
 
 import java.awt.Color;
+import java.awt.Window;
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
 import java.io.Serializable;
 import java.nio.file.Path;
+import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.Date;
 import java.util.List;
-import java.util.jar.JarEntry;
-import java.util.jar.JarInputStream;
-import java.util.jar.JarOutputStream;
 import java.util.stream.Stream;
 
 import com.atlauncher.App;
-import com.atlauncher.FileSystem;
-import com.atlauncher.data.curse.CurseFile;
-import com.atlauncher.data.curse.CurseMod;
-import com.atlauncher.gui.dialogs.CurseModFileSelectorDialog;
-import com.atlauncher.managers.DialogManager;
+import com.atlauncher.data.curseforge.CurseForgeFile;
+import com.atlauncher.data.curseforge.CurseForgeProject;
+import com.atlauncher.data.modrinth.ModrinthMod;
+import com.atlauncher.data.modrinth.ModrinthVersion;
+import com.atlauncher.gui.dialogs.CurseForgeProjectFileSelectorDialog;
+import com.atlauncher.gui.dialogs.ModrinthVersionSelectorDialog;
+import com.atlauncher.gui.dialogs.ProgressDialog;
 import com.atlauncher.managers.LogManager;
 import com.atlauncher.network.Analytics;
-import com.atlauncher.utils.CurseApi;
+import com.atlauncher.utils.CurseForgeApi;
+import com.atlauncher.utils.ModrinthApi;
 import com.atlauncher.utils.Utils;
+import com.google.gson.annotations.SerializedName;
 
 import org.mini2Dx.gettext.GetText;
 
@@ -56,14 +58,26 @@ public class DisableableMod implements Serializable {
     public boolean disabled;
     public boolean userAdded = false; // Default to not being user added
     public boolean wasSelected = true; // Default to it being selected on install
-    public Integer curseModId;
-    public Integer curseFileId;
-    public CurseMod curseMod;
-    public CurseFile curseFile;
+
+    @SerializedName(value = "curseForgeProjectId", alternate = { "curseModId" })
+    public Integer curseForgeProjectId;
+
+    @SerializedName(value = "curseForgeFileId", alternate = { "curseFileId" })
+    public Integer curseForgeFileId;
+
+    @SerializedName(value = "curseForgeProject", alternate = { "curseMod" })
+    public CurseForgeProject curseForgeProject;
+
+    @SerializedName(value = "curseForgeFile", alternate = { "curseFile" })
+    public CurseForgeFile curseForgeFile;
+
+    public ModrinthMod modrinthMod;
+    public ModrinthVersion modrinthVersion;
 
     public DisableableMod(String name, String version, boolean optional, String file, Type type, Color colour,
-            String description, boolean disabled, boolean userAdded, boolean wasSelected, Integer curseModId,
-            Integer curseFileId, CurseMod curseMod, CurseFile curseFile) {
+            String description, boolean disabled, boolean userAdded, boolean wasSelected, Integer curseForgeModId,
+            Integer curseForgeFileId, CurseForgeProject curseForgeProject, CurseForgeFile curseForgeFile,
+            ModrinthMod modrinthMod, ModrinthVersion modrinthVersion) {
         this.name = name;
         this.version = version;
         this.optional = optional;
@@ -74,24 +88,40 @@ public class DisableableMod implements Serializable {
         this.disabled = disabled;
         this.userAdded = userAdded;
         this.wasSelected = wasSelected;
-        this.curseModId = curseModId;
-        this.curseFileId = curseFileId;
-        this.curseMod = curseMod;
-        this.curseFile = curseFile;
+        this.curseForgeProjectId = curseForgeModId;
+        this.curseForgeFileId = curseForgeFileId;
+        this.curseForgeProject = curseForgeProject;
+        this.curseForgeFile = curseForgeFile;
+        this.modrinthMod = modrinthMod;
+        this.modrinthVersion = modrinthVersion;
     }
 
     public DisableableMod(String name, String version, boolean optional, String file, Type type, Color colour,
-            String description, boolean disabled, boolean userAdded, boolean wasSelected, CurseMod curseMod,
-            CurseFile curseFile) {
-        this(name, version, optional, file, type, colour, description, disabled, userAdded, wasSelected, curseMod.id,
-                curseFile.id, curseMod, curseFile);
+            String description, boolean disabled, boolean userAdded, boolean wasSelected, Integer curseForgeModId,
+            Integer curseForgeFileId, CurseForgeProject curseForgeProject, CurseForgeFile curseForgeFile) {
+        this(name, version, optional, file, type, colour, description, disabled, userAdded, wasSelected,
+                curseForgeModId, curseForgeFileId, curseForgeProject, curseForgeFile, null, null);
     }
 
     public DisableableMod(String name, String version, boolean optional, String file, Type type, Color colour,
-            String description, boolean disabled, boolean userAdded, boolean wasSelected, Integer curseModId,
-            Integer curseFileId) {
-        this(name, version, optional, file, type, colour, description, disabled, userAdded, wasSelected, curseModId,
-                curseFileId, null, null);
+            String description, boolean disabled, boolean userAdded, boolean wasSelected,
+            CurseForgeProject curseForgeProject, CurseForgeFile curseForgeFile) {
+        this(name, version, optional, file, type, colour, description, disabled, userAdded, wasSelected,
+                curseForgeProject.id, curseForgeFile.id, curseForgeProject, curseForgeFile);
+    }
+
+    public DisableableMod(String name, String version, boolean optional, String file, Type type, Color colour,
+            String description, boolean disabled, boolean userAdded, boolean wasSelected, ModrinthMod modrinthMod,
+            ModrinthVersion modrinthVersion) {
+        this(name, version, optional, file, type, colour, description, disabled, userAdded, wasSelected, null, null,
+                null, null, modrinthMod, modrinthVersion);
+    }
+
+    public DisableableMod(String name, String version, boolean optional, String file, Type type, Color colour,
+            String description, boolean disabled, boolean userAdded, boolean wasSelected, Integer curseForgeModId,
+            Integer curseForgeFileId) {
+        this(name, version, optional, file, type, colour, description, disabled, userAdded, wasSelected,
+                curseForgeModId, curseForgeFileId, null, null);
     }
 
     public DisableableMod(String name, String version, boolean optional, String file, Type type, Color colour,
@@ -152,20 +182,28 @@ public class DisableableMod implements Serializable {
         return this.userAdded;
     }
 
-    public boolean isFromCurse() {
-        return this.curseModId != null && this.curseFileId != null;
+    public boolean isUpdatable() {
+        return this.isFromCurseForge() || this.isFromModrinth();
     }
 
-    public boolean hasFullCurseInformation() {
-        return this.curseMod != null && this.curseFile != null;
+    public boolean isFromCurseForge() {
+        return this.curseForgeProjectId != null && this.curseForgeFileId != null;
     }
 
-    public Integer getCurseModId() {
-        return this.curseModId;
+    public boolean hasFullCurseForgeInformation() {
+        return this.curseForgeProject != null && this.curseForgeFile != null;
     }
 
-    public Integer getCurseFileId() {
-        return this.curseFileId;
+    public Integer getCurseForgeModId() {
+        return this.curseForgeProjectId;
+    }
+
+    public Integer getCurseForgeFileId() {
+        return this.curseForgeFileId;
+    }
+
+    public boolean isFromModrinth() {
+        return this.modrinthMod != null && this.modrinthVersion != null;
     }
 
     public String getFilename() {
@@ -178,51 +216,6 @@ public class DisableableMod implements Serializable {
                 getFile(instance).getParentFile().mkdir();
             }
             if (Utils.moveFile(getDisabledFile(instance), getFile(instance), true)) {
-                if (this.type == Type.jar) {
-                    File inputFile = instance.getMinecraftJar();
-                    File outputTmpFile = FileSystem.TEMP.resolve(instance.getSafeName() + "-minecraft.jar").toFile();
-                    if (Utils.hasMetaInf(inputFile)) {
-                        try {
-                            JarInputStream input = new JarInputStream(new FileInputStream(inputFile));
-                            JarOutputStream output = new JarOutputStream(new FileOutputStream(outputTmpFile));
-                            JarEntry entry;
-
-                            while ((entry = input.getNextJarEntry()) != null) {
-                                if (entry.getName().contains("META-INF")) {
-                                    continue;
-                                }
-                                output.putNextEntry(entry);
-                                byte buffer[] = new byte[1024];
-                                int amo;
-                                while ((amo = input.read(buffer, 0, 1024)) != -1) {
-                                    output.write(buffer, 0, amo);
-                                }
-                                output.closeEntry();
-                            }
-
-                            input.close();
-                            output.close();
-
-                            inputFile.delete();
-                            outputTmpFile.renameTo(inputFile);
-                        } catch (IOException e) {
-                            LogManager.logStackTrace(e);
-                        }
-                    }
-                }
-                this.disabled = false;
-                return true;
-            }
-        }
-        return false;
-    }
-
-    public boolean enable(InstanceV2 instance) {
-        if (this.disabled) {
-            if (!getFile(instance).getParentFile().exists()) {
-                getFile(instance).getParentFile().mkdir();
-            }
-            if (Utils.moveFile(getDisabledFile(instance), getFile(instance), true)) {
                 this.disabled = false;
             }
         }
@@ -230,16 +223,6 @@ public class DisableableMod implements Serializable {
     }
 
     public boolean disable(Instance instance) {
-        if (!this.disabled) {
-            if (Utils.moveFile(getFile(instance), instance.getDisabledModsDirectory(), false)) {
-                this.disabled = true;
-                return true;
-            }
-        }
-        return false;
-    }
-
-    public boolean disable(InstanceV2 instance) {
         if (!this.disabled) {
             if (Utils.moveFile(getFile(instance), getDisabledFile(instance), true)) {
                 this.disabled = true;
@@ -257,66 +240,23 @@ public class DisableableMod implements Serializable {
         return getFile(instance).exists();
     }
 
-    public boolean doesFileExist(InstanceV2 instanceV2) {
-        if (isDisabled()) {
-            return getDisabledFile(instanceV2).exists();
-        }
-
-        return getFile(instanceV2).exists();
-    }
-
     public File getDisabledFile(Instance instance) {
-        return new File(instance.getDisabledModsDirectory(), this.file);
-    }
-
-    public File getDisabledFile(InstanceV2 instance) {
         return instance.getRoot().resolve("disabledmods/" + this.file).toFile();
     }
 
     public File getFile(Instance instance) {
-        File dir = null;
-        switch (type) {
-            case jar:
-            case forge:
-            case mcpc:
-                dir = instance.getJarModsDirectory();
-                break;
-            case texturepack:
-                dir = instance.getTexturePacksDirectory();
-                break;
-            case resourcepack:
-                dir = instance.getResourcePacksDirectory();
-                break;
-            case mods:
-                dir = instance.getModsDirectory();
-                break;
-            case ic2lib:
-                dir = instance.getIC2LibDirectory();
-                break;
-            case denlib:
-                dir = instance.getDenLibDirectory();
-                break;
-            case coremods:
-                dir = instance.getCoreModsDirectory();
-                break;
-            case shaderpack:
-                dir = instance.getShaderPacksDirectory();
-                break;
-            default:
-                LogManager.warn("Unsupported mod for enabling/disabling " + this.name);
-                break;
-        }
-        if (dir == null) {
-            return null;
-        }
-        return new File(dir, file);
+        return getFile(instance.getRoot(), null);
     }
 
-    public File getFile(InstanceV2 instance) {
-        return getFile(instance, instance.getRoot());
+    public File getFile(Instance instance, Path base) {
+        return getFile(base, null);
     }
 
-    public File getFile(InstanceV2 instance, Path base) {
+    public File getFile(Path base) {
+        return getFile(base, null);
+    }
+
+    public File getFile(Path base, String mcVersion) {
         File dir = null;
         switch (type) {
             case jar:
@@ -345,6 +285,11 @@ public class DisableableMod implements Serializable {
             case shaderpack:
                 dir = base.resolve("shaderpacks").toFile();
                 break;
+            case dependency:
+                if (mcVersion != null) {
+                    dir = base.resolve("mods/" + mcVersion).toFile();
+                }
+                break;
             default:
                 LogManager.warn("Unsupported mod for enabling/disabling " + this.name);
                 break;
@@ -359,64 +304,101 @@ public class DisableableMod implements Serializable {
         return this.type;
     }
 
-    public boolean checkForUpdate(InstanceV2 instance) {
-        Analytics.sendEvent(instance.launcher.pack + " - " + instance.launcher.version, "UpdateMods", "InstanceV2");
-        List<CurseFile> curseModFiles = CurseApi.getFilesForMod(curseModId);
+    public boolean checkForUpdate(Window parent, Instance instance) {
+        Analytics.sendEvent(instance.launcher.pack + " - " + instance.launcher.version, "UpdateMods", "Instance");
 
-        Stream<CurseFile> curseFilesStream = curseModFiles.stream()
-                .sorted(Comparator.comparingInt((CurseFile file) -> file.id).reversed());
+        if (isFromCurseForge()) {
+            List<CurseForgeFile> curseForgeFiles = CurseForgeApi.getFilesForProject(curseForgeProjectId);
 
-        if (!App.settings.disableAddModRestrictions) {
-            curseFilesStream = curseFilesStream
-                    .filter(file -> App.settings.disableAddModRestrictions || file.gameVersion.contains(instance.id));
+            Stream<CurseForgeFile> curseForgeFilesStream = curseForgeFiles.stream()
+                    .sorted(Comparator.comparingInt((CurseForgeFile file) -> file.id).reversed());
+
+            if (App.settings.addModRestriction == AddModRestriction.STRICT) {
+                curseForgeFilesStream = curseForgeFilesStream.filter(file -> file.gameVersion.contains(instance.id));
+            }
+
+            if (curseForgeFilesStream.noneMatch(file -> file.id > curseForgeFileId)) {
+                return false;
+            }
+
+            ProgressDialog<CurseForgeProject> dialog = new ProgressDialog<>(
+                    GetText.tr("Checking For Update On CurseForge"), 0, GetText.tr("Checking For Update On CurseForge"),
+                    "Cancelled checking for update on CurseForge");
+            dialog.addThread(new Thread(() -> {
+                dialog.setReturnValue(CurseForgeApi.getProjectById(curseForgeProjectId));
+                dialog.close();
+            }));
+            dialog.start();
+
+            new CurseForgeProjectFileSelectorDialog(parent, dialog.getReturnValue(), instance, curseForgeFileId);
+        } else if (isFromModrinth()) {
+            ProgressDialog<List<Object>> dialog = new ProgressDialog<>(GetText.tr("Checking For Update On Modrinth"), 0,
+                    GetText.tr("Checking For Update On Modrinth"), "Cancelled checking for update on Modrinth");
+            dialog.addThread(new Thread(() -> {
+                ModrinthMod mod = ModrinthApi.getMod(modrinthMod.id);
+                List<ModrinthVersion> versions = ModrinthApi.getVersions(mod.versions);
+
+                Stream<ModrinthVersion> versionsStream = versions.stream()
+                        .sorted(Comparator.comparing((ModrinthVersion version) -> version.datePublished).reversed());
+
+                if (App.settings.addModRestriction == AddModRestriction.STRICT) {
+                    versionsStream = versionsStream.filter(
+                            v -> v.gameVersions.contains(instance.id));
+                }
+
+                if (versionsStream.noneMatch(v -> Date.from(Instant.parse(v.datePublished))
+                        .after(Date.from(Instant.parse(modrinthVersion.datePublished))))) {
+                    dialog.setReturnValue(null);
+                    dialog.close();
+                    return;
+                }
+
+                List<Object> returns = new ArrayList<>();
+                returns.add(mod);
+                returns.add(versions);
+
+                dialog.setReturnValue(returns);
+                dialog.close();
+            }));
+            dialog.start();
+
+            if (dialog.getReturnValue() == null) {
+                return false;
+            }
+
+            List<Object> returns = dialog.getReturnValue();
+
+            new ModrinthVersionSelectorDialog(parent, (ModrinthMod) returns.get(0),
+                    (List<ModrinthVersion>) returns.get(1), instance, modrinthVersion.id);
         }
-
-        if (!curseFilesStream.anyMatch(mod -> mod.id > curseFileId)) {
-            DialogManager.okDialog().setTitle(GetText.tr("No Updates Found"))
-                    .setContent(GetText.tr("No updates were found for {0}.", name)).show();
-            return false;
-        }
-
-        new CurseModFileSelectorDialog(CurseApi.getModById(curseModId), instance, curseFileId);
 
         return true;
     }
 
-    public boolean checkForUpdate(Instance instance) {
-        Analytics.sendEvent(instance.getPackName() + " - " + instance.getVersion(), "UpdateMods", "Instance");
-        List<CurseFile> curseModFiles = CurseApi.getFilesForMod(curseModId);
+    public boolean reinstall(Window parent, Instance instance) {
+        Analytics.sendEvent(instance.launcher.pack + " - " + instance.launcher.version, "ReinstallMods", "Instance");
 
-        Stream<CurseFile> curseFilesStream = curseModFiles.stream()
-                .sorted(Comparator.comparingInt((CurseFile file) -> file.id).reversed());
+        if (isFromCurseForge()) {
+            ProgressDialog<CurseForgeProject> dialog = new ProgressDialog<>(GetText.tr("Getting Files From CurseForge"),
+                    0, GetText.tr("Getting Files From CurseForge"), "Cancelled getting files from CurseForge");
+            dialog.addThread(new Thread(() -> {
+                dialog.setReturnValue(CurseForgeApi.getProjectById(curseForgeProjectId));
+                dialog.close();
+            }));
+            dialog.start();
 
-        if (!App.settings.disableAddModRestrictions) {
-            curseFilesStream = curseFilesStream.filter(file -> App.settings.disableAddModRestrictions
-                    || file.gameVersion.contains(instance.getMinecraftVersion()));
+            new CurseForgeProjectFileSelectorDialog(parent, dialog.getReturnValue(), instance, curseForgeFileId);
+        } else if (isFromModrinth()) {
+            ProgressDialog<ModrinthMod> dialog = new ProgressDialog<>(GetText.tr("Getting Files From Modrinth"), 0,
+                    GetText.tr("Getting Files From Modrinth"), "Cancelled getting files from Modrinth");
+            dialog.addThread(new Thread(() -> {
+                dialog.setReturnValue(ModrinthApi.getMod(modrinthMod.id));
+                dialog.close();
+            }));
+            dialog.start();
+
+            new ModrinthVersionSelectorDialog(parent, dialog.getReturnValue(), instance, modrinthVersion.id);
         }
-
-        if (!curseFilesStream.anyMatch(mod -> mod.id > curseFileId)) {
-            DialogManager.okDialog().setTitle(GetText.tr("No Updates Found"))
-                    .setContent(GetText.tr("No updates were found for {0}.", name)).show();
-            return false;
-        }
-
-        new CurseModFileSelectorDialog(CurseApi.getModById(curseModId), instance, curseFileId);
-
-        return true;
-    }
-
-    public boolean reinstall(InstanceV2 instance) {
-        Analytics.sendEvent(instance.launcher.pack + " - " + instance.launcher.version, "ReinstallMods", "InstanceV2");
-
-        new CurseModFileSelectorDialog(CurseApi.getModById(curseModId), instance, curseFileId);
-
-        return true;
-    }
-
-    public boolean reinstall(Instance instance) {
-        Analytics.sendEvent(instance.getPackName() + " - " + instance.getVersion(), "ReinstallMods", "Instance");
-
-        new CurseModFileSelectorDialog(CurseApi.getModById(curseModId), instance, curseFileId);
 
         return true;
     }

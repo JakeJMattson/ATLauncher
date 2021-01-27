@@ -1,6 +1,6 @@
 /*
  * ATLauncher - https://github.com/ATLauncher/ATLauncher
- * Copyright (C) 2013-2020 ATLauncher
+ * Copyright (C) 2013-2021 ATLauncher
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -29,7 +29,7 @@ import javax.swing.JPanel;
 
 import com.atlauncher.App;
 import com.atlauncher.FileSystem;
-import com.atlauncher.data.Account;
+import com.atlauncher.data.AbstractAccount;
 import com.atlauncher.evnt.listener.AccountListener;
 import com.atlauncher.evnt.listener.RelocalizationListener;
 import com.atlauncher.evnt.manager.ConsoleCloseManager;
@@ -45,18 +45,16 @@ import org.mini2Dx.gettext.GetText;
 
 @SuppressWarnings("serial")
 public class LauncherBottomBar extends BottomBar implements RelocalizationListener, AccountListener {
-    private JPanel leftSide;
-    private JPanel middle;
     private boolean dontSave = false;
     private JButton toggleConsole;
     private JButton openFolder;
     private JButton updateData;
-    private JComboBox<Account> username;
+    private JComboBox<AbstractAccount> username;
 
     public LauncherBottomBar() {
-        leftSide = new JPanel();
+        JPanel leftSide = new JPanel();
         leftSide.setLayout(new GridBagLayout());
-        middle = new JPanel();
+        JPanel middle = new JPanel();
         middle.setLayout(new GridBagLayout());
         GridBagConstraints gbc = new GridBagConstraints();
 
@@ -111,7 +109,7 @@ public class LauncherBottomBar extends BottomBar implements RelocalizationListen
             if (e.getStateChange() == ItemEvent.SELECTED) {
                 if (!dontSave) {
                     Analytics.sendEvent("Switch", "Account");
-                    AccountManager.switchAccount((Account) username.getSelectedItem());
+                    AccountManager.switchAccount((AbstractAccount) username.getSelectedItem());
                 }
             }
         });
@@ -130,16 +128,19 @@ public class LauncherBottomBar extends BottomBar implements RelocalizationListen
         }
 
         openFolder = new JButton(GetText.tr("Open Folder"));
+
         updateData = new JButton(GetText.tr("Update Data"));
+        updateData.setName("updateData");
 
         username = new JComboBox<>();
+        username.setName("accountSelector");
         username.setRenderer(new AccountsDropDownRenderer());
 
-        for (Account account : AccountManager.getAccounts()) {
+        for (AbstractAccount account : AccountManager.getAccounts()) {
             username.addItem(account);
         }
 
-        Account active = AccountManager.getSelectedAccount();
+        AbstractAccount active = AccountManager.getSelectedAccount();
 
         if (active != null) {
             username.setSelectedItem(active);
@@ -150,7 +151,7 @@ public class LauncherBottomBar extends BottomBar implements RelocalizationListen
         dontSave = true;
         username.removeAllItems();
 
-        for (Account account : AccountManager.getAccounts()) {
+        for (AbstractAccount account : AccountManager.getAccounts()) {
             username.addItem(account);
         }
 

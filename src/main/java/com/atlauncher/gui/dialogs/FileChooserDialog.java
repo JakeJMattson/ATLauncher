@@ -1,6 +1,6 @@
 /*
  * ATLauncher - https://github.com/ATLauncher/ATLauncher
- * Copyright (C) 2013-2020 ATLauncher
+ * Copyright (C) 2013-2021 ATLauncher
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -18,12 +18,15 @@
 package com.atlauncher.gui.dialogs;
 
 import java.awt.BorderLayout;
+import java.awt.FileDialog;
 import java.awt.FlowLayout;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
+import java.awt.Window;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.io.File;
+import java.io.FilenameFilter;
 import java.util.ArrayList;
 
 import javax.swing.Box;
@@ -47,28 +50,18 @@ import org.mini2Dx.gettext.GetText;
 
 @SuppressWarnings("serial")
 public class FileChooserDialog extends JDialog {
-    private JPanel top;
-    private JPanel middle;
-    private JPanel bottom;
 
-    private JLabel nameLabel;
-    private JTextField textField;
+    private final JTextField textField;
 
-    private JLabel selectorLabel;
-    private JComboBox<String> selector;
+    private final JComboBox<String> selector;
 
     private File[] filesChosen;
-    private String[] fileOptions;
-
-    private JButton bottomButton;
-    private JButton selectButton;
 
     private boolean closed = false;
 
-    public FileChooserDialog(String title, String labelName, String bottomText, String selectorText,
-            String[] subOptions, String[] options) {
-        super(App.launcher.getParent(), title, ModalityType.APPLICATION_MODAL);
-        this.fileOptions = options;
+    public FileChooserDialog(Window parent, String title, String labelName, String bottomText, String selectorText,
+            String[] subOptions) {
+        super(parent, title, ModalityType.DOCUMENT_MODAL);
         setSize(400, 175);
         setLocationRelativeTo(null);
         setLayout(new BorderLayout());
@@ -77,11 +70,11 @@ public class FileChooserDialog extends JDialog {
         setResizable(false);
 
         // Top Panel Stuff
-        top = new JPanel();
+        JPanel top = new JPanel();
         top.add(new JLabel(title));
 
         // Middle Panel Stuff
-        middle = new JPanel();
+        JPanel middle = new JPanel();
         middle.setLayout(new GridBagLayout());
         GridBagConstraints gbc = new GridBagConstraints();
 
@@ -89,7 +82,7 @@ public class FileChooserDialog extends JDialog {
         gbc.gridy = 0;
         gbc.anchor = GridBagConstraints.BASELINE_TRAILING;
         gbc.insets = UIConstants.LABEL_INSETS;
-        nameLabel = new JLabel(labelName + ": ");
+        JLabel nameLabel = new JLabel(labelName + ": ");
         middle.add(nameLabel, gbc);
 
         gbc.gridx++;
@@ -102,32 +95,13 @@ public class FileChooserDialog extends JDialog {
         textField = new JTextField(16);
         textField.setEnabled(false);
 
-        selectButton = new JButton(GetText.tr("Select"));
+        JButton selectButton = new JButton(GetText.tr("Select"));
         selectButton.addActionListener(e -> {
-            JFileChooser fileChooser = new JFileChooser(FileSystem.BASE_DIR.toFile());
-            fileChooser.setMultiSelectionEnabled(true);
-            fileChooser.setFileFilter(new FileFilter() {
-                @Override
-                public String getDescription() {
-                    return "Mod Files (.jar; .zip; .litemod)";
-                }
-
-                @Override
-                public boolean accept(File f) {
-                    if (f.isDirectory()) {
-                        return true;
-                    }
-
-                    for (String ext : fileOptions) {
-                        if (f.getName().endsWith(ext)) {
-                            return true;
-                        }
-                    }
-                    return false;
-                }
-            });
-            fileChooser.showOpenDialog(App.launcher.getParent());
-            filesChosen = fileChooser.getSelectedFiles();
+            if (App.settings.useNativeFilePicker) {
+                filesChosen = getFilesUsingFileDialog();
+            } else {
+                filesChosen = getFilesUsingJFileChooser();
+            }
             if (filesChosen != null && filesChosen.length >= 1) {
                 if (filesChosen.length == 1) {
                     textField.setText(filesChosen[0].getAbsolutePath());
@@ -147,7 +121,7 @@ public class FileChooserDialog extends JDialog {
         gbc.gridy++;
         gbc.anchor = GridBagConstraints.BASELINE_TRAILING;
         gbc.insets = UIConstants.LABEL_INSETS;
-        selectorLabel = new JLabel(selectorText + ": ");
+        JLabel selectorLabel = new JLabel(selectorText + ": ");
         middle.add(selectorLabel, gbc);
 
         gbc.gridx++;
@@ -160,9 +134,9 @@ public class FileChooserDialog extends JDialog {
         middle.add(selector, gbc);
 
         // Bottom Panel Stuff
-        bottom = new JPanel();
+        JPanel bottom = new JPanel();
         bottom.setLayout(new FlowLayout());
-        bottomButton = new JButton(bottomText);
+        JButton bottomButton = new JButton(bottomText);
         bottomButton.addActionListener(e -> close());
         bottom.add(bottomButton);
 
@@ -180,6 +154,46 @@ public class FileChooserDialog extends JDialog {
         setVisible(true);
     }
 
+    private File[] getFilesUsingJFileChooser() {
+        JFileChooser fileChooser = new JFileChooser(FileSystem.BASE_DIR.toFile());
+        fileChooser.setMultiSelectionEnabled(true);
+        fileChooser.setFileFilter(new FileFilter() {
+            @Override
+            public String getDescription() {
+                return "Mod Files (.jar; .zip; .litemod)";
+            }
+
+            @Override
+            public boolean accept(File f) {
+                if (f.isDirectory()) {
+                    return true;
+                }
+
+                return shouldAcceptFilename(f.getName());
+            }
+        });
+        fileChooser.showOpenDialog(App.launcher.getParent());
+
+        return fileChooser.getSelectedFiles();
+    }
+
+    private boolean shouldAcceptFilename(String name) {
+        return Utils.isAcceptedModFile(name);
+    }
+
+    private File[] getFilesUsingFileDialog() {
+        FileDialog fd = new FileDialog(this, GetText.tr("Select file/s"), FileDialog.LOAD);
+        fd.setFilenameFilter(new FilenameFilter() {
+            @Override
+            public boolean accept(File dir, String name) {
+                return shouldAcceptFilename(name);
+            }
+        });
+        fd.setVisible(true);
+
+        return fd.getFiles();
+    }
+
     private void close() {
         setVisible(false);
         dispose();
@@ -195,10 +209,8 @@ public class FileChooserDialog extends JDialog {
             return null;
         }
         for (File file : filesChosen) {
-            for (String ext : fileOptions) {
-                if (file.getName().endsWith(ext)) {
-                    files.add(file);
-                }
+            if (Utils.isAcceptedModFile(file)) {
+                files.add(file);
             }
         }
         return files;

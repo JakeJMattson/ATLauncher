@@ -1,6 +1,6 @@
 /*
  * ATLauncher - https://github.com/ATLauncher/ATLauncher
- * Copyright (C) 2013-2020 ATLauncher
+ * Copyright (C) 2013-2021 ATLauncher
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -29,7 +29,7 @@ import javax.swing.JLabel;
 import com.atlauncher.App;
 import com.atlauncher.FileSystem;
 import com.atlauncher.builders.HTMLBuilder;
-import com.atlauncher.data.Constants;
+import com.atlauncher.constants.Constants;
 import com.atlauncher.evnt.listener.SettingsListener;
 import com.atlauncher.evnt.manager.SettingsManager;
 import com.atlauncher.gui.dialogs.ProgressDialog;
@@ -43,19 +43,20 @@ import org.mini2Dx.gettext.GetText;
 
 @SuppressWarnings("serial")
 public class NetworkCheckerToolPanel extends AbstractToolPanel implements ActionListener, SettingsListener {
-    private final JLabel INFO_LABEL = new JLabel(new HTMLBuilder().center().split(70)
-            .text(GetText
-                    .tr("This tool does various tests on your network and determines any issues that may pop up with "
-                            + "connecting to our file servers and to other servers."))
-            .build());
 
     private final String[] HOSTS = { "authserver.mojang.com", "session.minecraft.net", "libraries.minecraft.net",
             "launchermeta.mojang.com", "launcher.mojang.com", Constants.API_HOST, Constants.PASTE_HOST,
-            Constants.DOWNLOAD_HOST, Constants.FABRIC_HOST, Constants.FORGE_HOST, Constants.CURSE_HOST };
+            Constants.DOWNLOAD_HOST, Constants.FABRIC_HOST, Constants.FORGE_HOST, Constants.CURSEFORGE_HOST,
+            Constants.MODRINTH_HOST, Constants.MODPACKS_CH_HOST };
 
     public NetworkCheckerToolPanel() {
         super(GetText.tr("Network Checker"));
 
+        JLabel INFO_LABEL = new JLabel(new HTMLBuilder().center().split(70)
+                .text(GetText.tr(
+                        "This tool does various tests on your network and determines any issues that may pop up with "
+                                + "connecting to our file servers and to other servers."))
+                .build());
         MIDDLE_PANEL.add(INFO_LABEL);
         BOTTOM_PANEL.add(LAUNCH_BUTTON);
         LAUNCH_BUTTON.addActionListener(this);
@@ -78,64 +79,85 @@ public class NetworkCheckerToolPanel extends AbstractToolPanel implements Action
                 .setType(DialogManager.INFO).show();
 
         if (ret == 0) {
-            final ProgressDialog dialog = new ProgressDialog(GetText.tr("Network Checker"), 13 + HOSTS.length,
-                    GetText.tr("Network Checker Running. Please Wait!"), "Network Checker Tool Cancelled!");
+            final ProgressDialog<Boolean> dialog = new ProgressDialog<>(GetText.tr("Network Checker"),
+                    17 + HOSTS.length, GetText.tr("Network Checker Running. Please Wait!"),
+                    "Network Checker Tool Cancelled!");
             dialog.addThread(new Thread(() -> {
                 StringBuilder results = new StringBuilder();
 
                 // Connection to CDN
-                results.append("Ping results to " + Constants.DOWNLOAD_HOST + " was "
-                        + Utils.pingAddress(Constants.DOWNLOAD_HOST));
+                results.append("Ping results to " + Constants.DOWNLOAD_HOST + " was ")
+                        .append(Utils.pingAddress(Constants.DOWNLOAD_HOST));
                 dialog.doneTask();
 
-                results.append("Tracert to " + Constants.DOWNLOAD_HOST + " was "
-                        + Utils.traceRoute(Constants.DOWNLOAD_HOST) + "\n\n----------------\n\n");
+                results.append("Tracert to " + Constants.DOWNLOAD_HOST + " was ")
+                        .append(Utils.traceRoute(Constants.DOWNLOAD_HOST)).append("\n\n----------------\n\n");
                 dialog.doneTask();
 
                 // Connection to ATLauncher API
-                results.append(
-                        "Ping results to " + Constants.API_HOST + " was " + Utils.pingAddress(Constants.API_HOST));
+                results.append("Ping results to " + Constants.API_HOST + " was ")
+                        .append(Utils.pingAddress(Constants.API_HOST));
                 dialog.doneTask();
 
-                results.append("Tracert to " + Constants.API_HOST + " was " + Utils.traceRoute(Constants.API_HOST)
-                        + "\n\n----------------\n\n");
+                results.append("Tracert to " + Constants.API_HOST + " was ")
+                        .append(Utils.traceRoute(Constants.API_HOST)).append("\n\n----------------\n\n");
                 dialog.doneTask();
 
-                // Connection to Curse API
-                results.append(
-                        "Ping results to " + Constants.CURSE_HOST + " was " + Utils.pingAddress(Constants.CURSE_HOST));
+                // Connection to CurseForge API
+                results.append("Ping results to " + Constants.CURSEFORGE_HOST + " was ")
+                        .append(Utils.pingAddress(Constants.CURSEFORGE_HOST));
                 dialog.doneTask();
 
-                results.append("Tracert to " + Constants.CURSE_HOST + " was " + Utils.traceRoute(Constants.CURSE_HOST)
-                        + "\n\n----------------\n\n");
+                results.append("Tracert to " + Constants.CURSEFORGE_HOST + " was ")
+                        .append(Utils.traceRoute(Constants.CURSEFORGE_HOST)).append("\n\n----------------\n\n");
+                dialog.doneTask();
+
+                // Connection to Modrinth API
+                results.append("Ping results to " + Constants.MODRINTH_HOST + " was ")
+                        .append(Utils.pingAddress(Constants.MODRINTH_HOST));
+                dialog.doneTask();
+
+                results.append("Tracert to " + Constants.MODRINTH_HOST + " was ")
+                        .append(Utils.traceRoute(Constants.MODRINTH_HOST)).append("\n\n----------------\n\n");
+                dialog.doneTask();
+
+                // Connection to Modpacks.ch API
+                results.append("Ping results to " + Constants.MODPACKS_CH_HOST + " was ")
+                        .append(Utils.pingAddress(Constants.MODPACKS_CH_HOST));
+                dialog.doneTask();
+
+                results.append("Tracert to " + Constants.MODPACKS_CH_HOST + " was ")
+                        .append(Utils.traceRoute(Constants.MODPACKS_CH_HOST)).append("\n\n----------------\n\n");
                 dialog.doneTask();
 
                 // Connection to Fabric CDN
-                results.append("Ping results to " + Constants.FABRIC_HOST + " was "
-                        + Utils.pingAddress(Constants.FABRIC_HOST));
+                results.append("Ping results to " + Constants.FABRIC_HOST + " was ")
+                        .append(Utils.pingAddress(Constants.FABRIC_HOST));
                 dialog.doneTask();
 
-                results.append("Tracert to " + Constants.FABRIC_HOST + " was " + Utils.traceRoute(Constants.FABRIC_HOST)
-                        + "\n\n----------------\n\n");
+                results.append("Tracert to " + Constants.FABRIC_HOST + " was ")
+                        .append(Utils.traceRoute(Constants.FABRIC_HOST)).append("\n\n----------------\n\n");
                 dialog.doneTask();
 
                 // Connection to Forge CDN
-                results.append(
-                        "Ping results to " + Constants.FORGE_HOST + " was " + Utils.pingAddress(Constants.FORGE_HOST));
+                results.append("Ping results to " + Constants.FORGE_HOST + " was ")
+                        .append(Utils.pingAddress(Constants.FORGE_HOST));
                 dialog.doneTask();
 
-                results.append("Tracert to " + Constants.FORGE_HOST + " was " + Utils.traceRoute(Constants.FORGE_HOST)
-                        + "\n\n----------------\n\n");
+                results.append("Tracert to " + Constants.FORGE_HOST + " was ")
+                        .append(Utils.traceRoute(Constants.FORGE_HOST)).append("\n\n----------------\n\n");
                 dialog.doneTask();
 
                 // Resolution of key services
                 for (String host : HOSTS) {
                     try {
-                        String resolvedHosts = Arrays.asList(InetAddress.getAllByName(host)).stream()
+                        String resolvedHosts = Arrays.stream(InetAddress.getAllByName(host))
                                 .map(InetAddress::getHostAddress).collect(Collectors.joining(", "));
-                        results.append("Resolution of " + host + " was " + resolvedHosts + "\n\n");
+                        results.append("Resolution of ").append(host).append(" was ").append(resolvedHosts)
+                                .append("\n\n");
                     } catch (Exception e1) {
-                        results.append("Resolution of " + host + " failed: " + e1.toString() + "\n\n");
+                        results.append("Resolution of ").append(host).append(" failed: ").append(e1.toString())
+                                .append("\n\n");
                     }
 
                     dialog.doneTask();
@@ -204,7 +226,7 @@ public class NetworkCheckerToolPanel extends AbstractToolPanel implements Action
                 dialog.close();
             }));
             dialog.start();
-            if (dialog.getReturnValue() == null || !(Boolean) dialog.getReturnValue()) {
+            if (dialog.getReturnValue() == null || !dialog.getReturnValue()) {
                 LogManager.error("Network Test failed to run!");
             } else {
                 LogManager.info("Network Test ran and submitted to " + Constants.LAUNCHER_NAME + "!");

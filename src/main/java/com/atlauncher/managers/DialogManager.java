@@ -1,6 +1,6 @@
 /*
  * ATLauncher - https://github.com/ATLauncher/ATLauncher
- * Copyright (C) 2013-2020 ATLauncher
+ * Copyright (C) 2013-2021 ATLauncher
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -159,7 +159,7 @@ public final class DialogManager {
             return this.parent;
         }
 
-        if (App.settings != null && App.launcher.getParent() != null) {
+        if (App.settings != null && App.launcher != null && App.launcher.getParent() != null) {
             return App.launcher.getParent();
         }
 

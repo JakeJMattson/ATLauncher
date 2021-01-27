@@ -1,6 +1,6 @@
 /*
  * ATLauncher - https://github.com/ATLauncher/ATLauncher
- * Copyright (C) 2013-2020 ATLauncher
+ * Copyright (C) 2013-2021 ATLauncher
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -29,8 +29,8 @@ import javax.swing.TransferHandler;
 
 import com.atlauncher.data.DisableableMod;
 import com.atlauncher.data.Type;
-import com.atlauncher.data.curse.CurseFingerprint;
-import com.atlauncher.data.curse.CurseFingerprintedMod;
+import com.atlauncher.data.curseforge.CurseForgeFingerprint;
+import com.atlauncher.data.curseforge.CurseForgeFingerprintedMod;
 import com.atlauncher.data.minecraft.FabricMod;
 import com.atlauncher.data.minecraft.MCMod;
 import com.atlauncher.exceptions.InvalidMinecraftVersion;
@@ -40,7 +40,7 @@ import com.atlauncher.gui.dialogs.ProgressDialog;
 import com.atlauncher.managers.DialogManager;
 import com.atlauncher.managers.LogManager;
 import com.atlauncher.managers.MinecraftManager;
-import com.atlauncher.utils.CurseApi;
+import com.atlauncher.utils.CurseForgeApi;
 import com.atlauncher.utils.Hashing;
 import com.atlauncher.utils.Utils;
 
@@ -48,8 +48,8 @@ import org.mini2Dx.gettext.GetText;
 
 @SuppressWarnings("serial")
 public class ModsJCheckBoxTransferHandler extends TransferHandler {
-    private EditModsDialog dialog;
-    private boolean disabled;
+    private final EditModsDialog dialog;
+    private final boolean disabled;
 
     public ModsJCheckBoxTransferHandler(EditModsDialog dialog, boolean disabled) {
         this.dialog = dialog;
@@ -77,8 +77,7 @@ public class ModsJCheckBoxTransferHandler extends TransferHandler {
 
             boolean usesCoreMods = false;
             try {
-                usesCoreMods = MinecraftManager.getMinecraftVersion(dialog.instanceV2 != null ? dialog.instanceV2.id
-                        : dialog.instance.getMinecraftVersion()).coremods;
+                usesCoreMods = MinecraftManager.getMinecraftVersion(dialog.instance.id).coremods;
             } catch (InvalidMinecraftVersion e1) {
                 LogManager.logStackTrace(e1);
             }
@@ -101,28 +100,22 @@ public class ModsJCheckBoxTransferHandler extends TransferHandler {
 
             if (typeTemp.equalsIgnoreCase("Inside Minecraft.jar")) {
                 type = Type.jar;
-                instanceFile = dialog.instanceV2 != null ? dialog.instanceV2.getRoot().resolve("jarmods").toFile()
-                        : dialog.instance.getJarModsDirectory();
+                instanceFile = dialog.instance.getRoot().resolve("jarmods").toFile();
             } else if (typeTemp.equalsIgnoreCase("CoreMods Mod")) {
                 type = Type.coremods;
-                instanceFile = dialog.instanceV2 != null ? dialog.instanceV2.getRoot().resolve("coremods").toFile()
-                        : dialog.instance.getCoreModsDirectory();
+                instanceFile = dialog.instance.getRoot().resolve("coremods").toFile();
             } else if (typeTemp.equalsIgnoreCase("Texture Pack")) {
                 type = Type.texturepack;
-                instanceFile = dialog.instanceV2 != null ? dialog.instanceV2.getRoot().resolve("texturepacks").toFile()
-                        : dialog.instance.getTexturePacksDirectory();
+                instanceFile = dialog.instance.getRoot().resolve("texturepacks").toFile();
             } else if (typeTemp.equalsIgnoreCase("Resource Pack")) {
                 type = Type.resourcepack;
-                instanceFile = dialog.instanceV2 != null ? dialog.instanceV2.getRoot().resolve("resourcepacks").toFile()
-                        : dialog.instance.getResourcePacksDirectory();
+                instanceFile = dialog.instance.getRoot().resolve("resourcepacks").toFile();
             } else if (typeTemp.equalsIgnoreCase("Shader Pack")) {
                 type = Type.shaderpack;
-                instanceFile = dialog.instanceV2 != null ? dialog.instanceV2.getRoot().resolve("shaderpacks").toFile()
-                        : dialog.instance.getShaderPacksDirectory();
+                instanceFile = dialog.instance.getRoot().resolve("shaderpacks").toFile();
             } else {
                 type = Type.mods;
-                instanceFile = dialog.instanceV2 != null ? dialog.instanceV2.getRoot().resolve("mods").toFile()
-                        : dialog.instance.getModsDirectory();
+                instanceFile = dialog.instance.getRoot().resolve("mods").toFile();
             }
 
             final ProgressDialog progressDialog = new ProgressDialog(GetText.tr("Copying Mods"), 0,
@@ -133,8 +126,7 @@ public class ModsJCheckBoxTransferHandler extends TransferHandler {
                     File file = (File) item;
                     File copyTo = instanceFile;
 
-                    if (!file.getName().endsWith(".jar") && !file.getName().endsWith(".litemod")
-                            && !file.getName().endsWith(".zip")) {
+                    if (!Utils.isAcceptedModFile(file)) {
                         DialogManager.okDialog().setTitle(GetText.tr("Invalid File")).setContent(GetText
                                 .tr("Skipping file {0}. Only zip, jar and litemod files can be added.", file.getName()))
                                 .setType(DialogManager.ERROR).show();
@@ -142,9 +134,7 @@ public class ModsJCheckBoxTransferHandler extends TransferHandler {
                     }
 
                     if (this.disabled) {
-                        copyTo = dialog.instanceV2 != null
-                                ? dialog.instanceV2.getRoot().resolve("disabledmods").toFile()
-                                : dialog.instance.getDisabledModsDirectory();
+                        copyTo = dialog.instance.getRoot().resolve("disabledmods").toFile();
                     }
 
                     DisableableMod mod = new DisableableMod();
@@ -177,22 +167,22 @@ public class ModsJCheckBoxTransferHandler extends TransferHandler {
 
                         LogManager.debug("File " + file.getName() + " has murmur hash of " + murmurHash);
 
-                        CurseFingerprint fingerprintResponse = CurseApi.checkFingerprint(murmurHash);
+                        CurseForgeFingerprint fingerprintResponse = CurseForgeApi.checkFingerprint(murmurHash);
 
                         if (fingerprintResponse.exactMatches.size() == 1) {
-                            CurseFingerprintedMod foundMod = fingerprintResponse.exactMatches.get(0);
+                            CurseForgeFingerprintedMod foundMod = fingerprintResponse.exactMatches.get(0);
 
-                            // add Curse information
-                            mod.curseMod = CurseApi.getModById(foundMod.id);
-                            mod.curseModId = foundMod.id;
-                            mod.curseFile = foundMod.file;
-                            mod.curseFileId = foundMod.file.id;
+                            // add CurseForge information
+                            mod.curseForgeProject = CurseForgeApi.getProjectById(foundMod.id);
+                            mod.curseForgeProjectId = foundMod.id;
+                            mod.curseForgeFile = foundMod.file;
+                            mod.curseForgeFileId = foundMod.file.id;
 
-                            mod.name = mod.curseMod.name;
-                            mod.description = mod.curseMod.summary;
+                            mod.name = mod.curseForgeProject.name;
+                            mod.description = mod.curseForgeProject.summary;
 
-                            LogManager.debug("Found matching mod from CurseForge called " + mod.curseMod.name
-                                    + " with file named " + mod.curseFile.displayName);
+                            LogManager.debug("Found matching mod from CurseForge called " + mod.curseForgeProject.name
+                                    + " with file named " + mod.curseForgeFile.displayName);
                         }
                     } catch (IOException e1) {
                         LogManager.logStackTrace(e1);
@@ -203,11 +193,7 @@ public class ModsJCheckBoxTransferHandler extends TransferHandler {
                     }
 
                     if (Utils.copyFile(file, copyTo)) {
-                        if (dialog.instanceV2 != null) {
-                            dialog.instanceV2.launcher.mods.add(mod);
-                        } else {
-                            dialog.instance.getInstalledMods().add(mod);
-                        }
+                        dialog.instance.launcher.mods.add(mod);
                     }
                 }
                 progressDialog.close();
@@ -217,9 +203,7 @@ public class ModsJCheckBoxTransferHandler extends TransferHandler {
             dialog.reloadPanels();
             return true;
 
-        } catch (UnsupportedFlavorException e) {
-            return false;
-        } catch (IOException e) {
+        } catch (UnsupportedFlavorException | IOException e) {
             return false;
         }
     }

@@ -1,6 +1,6 @@
 /*
  * ATLauncher - https://github.com/ATLauncher/ATLauncher
- * Copyright (C) 2013-2020 ATLauncher
+ * Copyright (C) 2013-2021 ATLauncher
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -34,7 +34,7 @@ public class Library {
             return true; // No rules setup so we need it
         }
 
-        if (this.rules.stream().filter(Rule::applies).count() == 0) {
+        if (this.rules.stream().noneMatch(Rule::applies)) {
             return false; // No rules apply to us, so we don't need this
         }
 

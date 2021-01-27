@@ -1,6 +1,6 @@
 /*
  * ATLauncher - https://github.com/ATLauncher/ATLauncher
- * Copyright (C) 2013-2020 ATLauncher
+ * Copyright (C) 2013-2021 ATLauncher
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -24,7 +24,7 @@ import java.util.Map;
 
 public final class PerformanceManager {
 
-    private static Map<String, Instant> times = new HashMap<>();
+    private static final Map<String, Instant> times = new HashMap<>();
 
     public static void start() {
         start(new Throwable().getStackTrace()[1].getMethodName());
@@ -41,7 +41,7 @@ public final class PerformanceManager {
     }
 
     public static void end(String name) {
-        if (LogManager.showDebug) {
+        if (LogManager.showDebug && times.containsKey(name)) {
             long timeElapsed = Duration.between(times.get(name), Instant.now()).toMillis();
 
             times.remove(name);

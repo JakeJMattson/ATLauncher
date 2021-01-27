@@ -1,6 +1,6 @@
 /*
  * ATLauncher - https://github.com/ATLauncher/ATLauncher
- * Copyright (C) 2013-2020 ATLauncher
+ * Copyright (C) 2013-2021 ATLauncher
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -17,6 +17,9 @@
  */
 package com.atlauncher.data;
 
+import java.awt.Dimension;
+import java.awt.Point;
+import java.awt.Rectangle;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
@@ -31,6 +34,7 @@ import java.util.UUID;
 
 import com.atlauncher.FileSystem;
 import com.atlauncher.Gsons;
+import com.atlauncher.constants.Constants;
 import com.atlauncher.managers.LogManager;
 import com.atlauncher.utils.OS;
 import com.atlauncher.utils.Timestamper;
@@ -44,19 +48,33 @@ public class Settings {
     public boolean firstTimeRun = true;
     public boolean hideJava9Warning = false;
     public List<String> addedPacks = new ArrayList<>();
+    public boolean ignoreOneDriveWarning = false;
+    public boolean ignoreProgramFilesWarning = false;
+
+    // Window settings
+    public boolean rememberWindowSizePosition = false;
+    public Dimension consoleSize = new Dimension(650, 400);
+    public Point consolePosition = new Point(0, 0);
+    public Dimension launcherSize = new Dimension(1200, 700);
+    public Point launcherPosition = null;
 
     // General
     public String language = "English";
     public String theme = Constants.DEFAULT_THEME_CLASS;
     public String dateFormat = "dd/MM/yyyy";
     public int selectedTabOnStartup = 0;
+    public String defaultModPlatform = "CurseForge";
+    public AddModRestriction addModRestriction = AddModRestriction.STRICT;
     public boolean sortPacksAlphabetically = false;
+    public boolean showPackNameAndVersion = true;
     public boolean keepLauncherOpen = true;
     public boolean enableConsole = true;
     public boolean enableTrayMenu = true;
     public boolean enableDiscordIntegration = true;
     public boolean enableFeralGamemode = OS.isLinux() && Utils.executableInPath("gamemoderun");
-    public boolean disableAddModRestrictions = false;
+    private boolean disableAddModRestrictions = false;
+    public boolean disableCustomFonts = false;
+    public boolean useNativeFilePicker = OS.isMac();
 
     // Java/Minecraft
     public int initialMemory = 512;
@@ -90,7 +108,8 @@ public class Settings {
     public int serverCheckerWait = 5;
 
     // Backups
-    public boolean enableModsBackups = true;
+    public boolean enableModsBackups = false;
+    public boolean enableAutomaticBackupAfterLaunch = false;
 
     public void convert(Properties properties) {
         String importedDateFormat = properties.getProperty("dateformat");
@@ -282,6 +301,11 @@ public class Settings {
     }
 
     public void validate() {
+        validateWindowSettings();
+
+        validateDisableAddModRestrictions();
+        validateDefaultModPlatform();
+
         validateJavaPath();
 
         validateMemory();
@@ -296,7 +320,48 @@ public class Settings {
         validateDateFormat();
     }
 
-    private void validateJavaPath() {
+    private void validateWindowSettings() {
+        if (consoleSize.width < 650) {
+            consoleSize.setSize(650, consoleSize.height);
+        }
+
+        if (consoleSize.height < 400) {
+            consoleSize.setSize(consoleSize.width, 400);
+        }
+
+        if (launcherSize.width < 1200) {
+            launcherSize.setSize(1200, launcherSize.height);
+        }
+
+        if (launcherSize.height < 700) {
+            launcherSize.setSize(launcherSize.width, 700);
+        }
+
+        if (launcherPosition != null
+                && !OS.getScreenVirtualBounds().contains(new Rectangle(launcherPosition, launcherSize))) {
+            launcherPosition = null;
+        }
+
+        if (consolePosition != null
+                && !OS.getScreenVirtualBounds().contains(new Rectangle(consolePosition, consoleSize))) {
+            consolePosition = null;
+        }
+    }
+
+    private void validateDisableAddModRestrictions() {
+        if (disableAddModRestrictions && addModRestriction != AddModRestriction.NONE) {
+            addModRestriction = AddModRestriction.NONE;
+        }
+    }
+
+    private void validateDefaultModPlatform() {
+        if (defaultModPlatform == null
+                || !(defaultModPlatform.equals("CurseForge") || defaultModPlatform.equals("Modrinth"))) {
+            defaultModPlatform = "CurseForge";
+        }
+    }
+
+    public void validateJavaPath() {
         if (!usingCustomJavaPath || javaPath == null) {
             javaPath = OS.getDefaultJavaPath();
         }

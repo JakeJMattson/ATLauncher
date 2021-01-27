@@ -1,6 +1,6 @@
 /*
  * ATLauncher - https://github.com/ATLauncher/ATLauncher
- * Copyright (C) 2013-2020 ATLauncher
+ * Copyright (C) 2013-2021 ATLauncher
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -19,7 +19,9 @@ package com.atlauncher.utils;
 
 import java.awt.Desktop;
 import java.awt.Dimension;
+import java.awt.GraphicsDevice;
 import java.awt.GraphicsEnvironment;
+import java.awt.Rectangle;
 import java.awt.Toolkit;
 import java.awt.datatransfer.Clipboard;
 import java.awt.datatransfer.StringSelection;
@@ -47,7 +49,7 @@ import java.util.stream.Collectors;
 
 import com.atlauncher.FileSystem;
 import com.atlauncher.Update;
-import com.atlauncher.data.Constants;
+import com.atlauncher.constants.Constants;
 import com.atlauncher.managers.LogManager;
 import com.atlauncher.managers.PerformanceManager;
 import com.atlauncher.network.Analytics;
@@ -146,24 +148,28 @@ public enum OS {
      */
     public static void openWebBrowser(URI uri) {
         try {
-            if (Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)) {
-                Desktop.getDesktop().browse(uri);
-            } else if (getOS() == LINUX && (Files.exists(Paths.get("/usr/bin/xdg-open"))
-                    || Files.exists(Paths.get("/usr/local/bin/xdg-open")))) {
+            if (getOS() == LINUX && Utils.executableInPath("xdg-open")) {
                 Runtime.getRuntime().exec("xdg-open " + uri);
+            } else if (Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)) {
+                Desktop.getDesktop().browse(uri);
             }
         } catch (Exception e) {
             LogManager.logStackTrace("Error opening web browser!", e);
         }
     }
 
+    public static void openFileExplorer(Path path) {
+        openFileExplorer(path, false);
+    }
+
     /**
      * Opens the system file explorer to the given path.
      */
-    public static void openFileExplorer(Path path) {
+    public static void openFileExplorer(Path path, boolean toFile) {
         try {
-            if (!Files.isDirectory(path) && OS.isWindows()) {
-                new ProcessBuilder("explorer", "/select," + path.toAbsolutePath()).start();
+            if ((toFile || !Files.isDirectory(path)) && OS.isWindows()) {
+                LogManager.info("/select," + path.toAbsolutePath());
+                Runtime.getRuntime().exec("explorer /select," + path.toAbsolutePath());
             } else {
                 Path pathToOpen = path;
 
@@ -264,12 +270,9 @@ public enum OS {
 
         // get newest 64 bit if installed
         Optional<JavaInfo> java64bit = validVersions.stream().filter(javaInfo -> javaInfo.is64bits).findFirst();
-        if (java64bit.isPresent()) {
-            return java64bit.get();
-        }
+        return java64bit.orElseGet(() -> validVersions.get(0));
 
         // default to the first java installed
-        return validVersions.get(0);
     }
 
     /**
@@ -310,7 +313,7 @@ public enum OS {
      */
     public static int getSystemRamViaBean() {
         PerformanceManager.start();
-        long ramm = 0;
+        long ramm;
         int ram = 0;
         OperatingSystemMXBean operatingSystemMXBean = ManagementFactory.getOperatingSystemMXBean();
         try {
@@ -332,12 +335,13 @@ public enum OS {
     }
 
     /**
-     * Returns the amount of RAM in the users system via the oshi (or if that fails the getMemory tool).
+     * Returns the amount of RAM in the users system via the oshi (or if that fails
+     * the getMemory tool).
      */
     public static int getSystemRamViaTool() {
         PerformanceManager.start();
 
-        int ram = 0;
+        int ram;
 
         try {
             SystemInfo systemInfo = getSystemInfo();
@@ -394,11 +398,8 @@ public enum OS {
                     processBuilder.redirectErrorStream(true);
 
                     Process process = processBuilder.start();
-                    BufferedReader br = new BufferedReader(new InputStreamReader(process.getInputStream()));
-                    try {
+                    try (BufferedReader br = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
                         memoryFromTool = (int) (Long.parseLong(br.readLine()) / 1048576);
-                    } finally {
-                        br.close();
                     }
                 } catch (IOException e) {
                     LogManager.logStackTrace(e);
@@ -447,11 +448,7 @@ public enum OS {
     public static int getMaximumRam() {
         int maxRam = getSystemRam();
         if (!is64Bit()) {
-            if (maxRam < 1024) {
-                return maxRam;
-            } else {
-                return 1024;
-            }
+            return Math.min(maxRam, 1024);
         } else {
             return maxRam;
         }
@@ -473,6 +470,17 @@ public enum OS {
         } else {
             return maxRam / 2;
         }
+    }
+
+    public static Rectangle getScreenVirtualBounds() {
+        Rectangle bounds = new Rectangle(0, 0, 0, 0);
+        GraphicsEnvironment ge = GraphicsEnvironment.getLocalGraphicsEnvironment();
+
+        for (GraphicsDevice gd : ge.getScreenDevices()) {
+            bounds.add(gd.getDefaultConfiguration().getBounds());
+        }
+
+        return bounds;
     }
 
     /**
@@ -529,9 +537,7 @@ public enum OS {
         }
 
         if (args != null) {
-            for (String arg : args) {
-                arguments.add(arg);
-            }
+            arguments.addAll(args);
         }
 
         ProcessBuilder processBuilder = new ProcessBuilder();
@@ -554,7 +560,14 @@ public enum OS {
      * This restarts the launcher in debug mode.
      */
     public static void relaunchInDebugMode() {
-        restartLauncher(new ArrayList<>(Arrays.asList("--debug", "--debug-level=3")));
+        relaunchInDebugMode(3);
+    }
+
+    /**
+     * This restarts the launcher in debug mode.
+     */
+    public static void relaunchInDebugMode(int level) {
+        restartLauncher(new ArrayList<>(Arrays.asList("--debug", "--debug-level=" + level)));
     }
 
     /**

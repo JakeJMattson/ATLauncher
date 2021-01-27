@@ -1,6 +1,6 @@
 /*
  * ATLauncher - https://github.com/ATLauncher/ATLauncher
- * Copyright (C) 2013-2020 ATLauncher
+ * Copyright (C) 2013-2021 ATLauncher
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -22,9 +22,9 @@ import java.util.List;
 import java.util.Map;
 
 public class FabricMetaLauncherMeta {
-    private String version;
-    private Map<String, String> mainClass;
-    private Map<String, List<FabricLibrary>> libraries;
+    private final String version;
+    private final Map<String, String> mainClass;
+    private final Map<String, List<FabricLibrary>> libraries;
 
     FabricMetaLauncherMeta(String version, Map<String, String> mainClass, Map<String, List<FabricLibrary>> libraries) {
         this.version = version;
@@ -45,9 +45,8 @@ public class FabricMetaLauncherMeta {
     }
 
     public List<FabricLibrary> getLibraries(boolean isServer) {
-        List<FabricLibrary> libraries = new ArrayList<>();
 
-        libraries.addAll(this.libraries.get("common"));
+        List<FabricLibrary> libraries = new ArrayList<>(this.libraries.get("common"));
 
         if (isServer) {
             libraries.addAll(this.libraries.get("server"));

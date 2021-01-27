@@ -1,6 +1,6 @@
 /*
  * ATLauncher - https://github.com/ATLauncher/ATLauncher
- * Copyright (C) 2013-2020 ATLauncher
+ * Copyright (C) 2013-2021 ATLauncher
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -19,6 +19,7 @@ package com.atlauncher.data.minecraft.loaders.forge;
 
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import com.atlauncher.annot.Json;
 
@@ -42,7 +43,7 @@ public class ForgeInstallProfile {
 
     public List<ForgeLibrary> getLibraries() {
         if (this.versionInfo != null) { // in <= 1.12.3
-            return this.versionInfo.getLibraries();
+            return this.versionInfo.getLibraries().stream().filter(l -> l != null).collect(Collectors.toList());
         }
 
         return this.libraries;

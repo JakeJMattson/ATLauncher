@@ -1,6 +1,6 @@
 /*
  * ATLauncher - https://github.com/ATLauncher/ATLauncher
- * Copyright (C) 2013-2020 ATLauncher
+ * Copyright (C) 2013-2021 ATLauncher
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -22,7 +22,7 @@ import java.nio.file.Path;
 
 import com.atlauncher.FileSystem;
 import com.atlauncher.annot.Json;
-import com.atlauncher.data.Constants;
+import com.atlauncher.constants.Constants;
 import com.atlauncher.data.minecraft.Download;
 import com.atlauncher.data.minecraft.Downloads;
 import com.atlauncher.data.minecraft.Library;

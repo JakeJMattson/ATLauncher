@@ -1,6 +1,6 @@
 /*
  * ATLauncher - https://github.com/ATLauncher/ATLauncher
- * Copyright (C) 2013-2020 ATLauncher
+ * Copyright (C) 2013-2021 ATLauncher
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -34,13 +34,12 @@ import org.mini2Dx.gettext.GetText;
 
 @SuppressWarnings("serial")
 public class ToolsTab extends JPanel implements Tab {
-    private JPanel mainPanel;
 
     public ToolsTab() {
         setLayout(new BorderLayout());
         setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
 
-        mainPanel = new JPanel();
+        JPanel mainPanel = new JPanel();
 
         mainPanel.setLayout(new GridLayout(3, 2, 10, 10));
 

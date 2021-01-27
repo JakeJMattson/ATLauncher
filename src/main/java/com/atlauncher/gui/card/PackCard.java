@@ -1,6 +1,6 @@
 /*
  * ATLauncher - https://github.com/ATLauncher/ATLauncher
- * Copyright (C) 2013-2020 ATLauncher
+ * Copyright (C) 2013-2021 ATLauncher
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -28,7 +28,7 @@ import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
 import javax.swing.JTextArea;
 
-import com.atlauncher.data.Constants;
+import com.atlauncher.constants.Constants;
 import com.atlauncher.data.Pack;
 import com.atlauncher.evnt.listener.RelocalizationListener;
 import com.atlauncher.evnt.manager.RelocalizationManager;
@@ -46,7 +46,6 @@ import org.mini2Dx.gettext.GetText;
 
 @SuppressWarnings("serial")
 public class PackCard extends CollapsiblePanel implements RelocalizationListener {
-    private final JTextArea descArea = new JTextArea();
     private final JButton newInstanceButton = new JButton(GetText.tr("New Instance"));
     private final JButton createServerButton = new JButton(GetText.tr("Create Server"));
     private final JButton discordInviteButton = new JButton("Discord");
@@ -55,8 +54,6 @@ public class PackCard extends CollapsiblePanel implements RelocalizationListener
     private final JButton serversButton = new JButton(GetText.tr("Servers"));
     private final JButton modsButton = new JButton(GetText.tr("View Mods"));
     private final JButton removePackButton = new JButton(GetText.tr("Remove"));
-    private final JPanel actionsPanel = new JPanel(new BorderLayout());
-    private final JSplitPane splitter = new JSplitPane();
     private final Pack pack;
 
     public PackCard(final Pack pack) {
@@ -65,9 +62,11 @@ public class PackCard extends CollapsiblePanel implements RelocalizationListener
 
         RelocalizationManager.addListener(this);
 
-        this.splitter.setLeftComponent(new PackImagePanel(pack));
-        this.splitter.setRightComponent(this.actionsPanel);
-        this.splitter.setEnabled(false);
+        JSplitPane splitter = new JSplitPane();
+        splitter.setLeftComponent(new PackImagePanel(pack));
+        JPanel actionsPanel = new JPanel(new BorderLayout());
+        splitter.setRightComponent(actionsPanel);
+        splitter.setEnabled(false);
 
         JPanel top = new JPanel(new FlowLayout(FlowLayout.CENTER, 5, 2));
         JPanel bottom = new JPanel(new FlowLayout(FlowLayout.CENTER, 5, 2));
@@ -101,19 +100,20 @@ public class PackCard extends CollapsiblePanel implements RelocalizationListener
 
         bottom.add(this.removePackButton);
 
-        this.descArea.setText(pack.getDescription());
-        this.descArea.setLineWrap(true);
-        this.descArea.setEditable(false);
-        this.descArea.setHighlighter(null);
-        this.descArea.setWrapStyleWord(true);
-        this.descArea.setCaretPosition(0);
+        JTextArea descArea = new JTextArea();
+        descArea.setText(pack.getDescription());
+        descArea.setLineWrap(true);
+        descArea.setEditable(false);
+        descArea.setHighlighter(null);
+        descArea.setWrapStyleWord(true);
+        descArea.setCaretPosition(0);
 
-        this.actionsPanel.add(new JScrollPane(this.descArea, JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED,
+        actionsPanel.add(new JScrollPane(descArea, JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED,
                 JScrollPane.HORIZONTAL_SCROLLBAR_NEVER), BorderLayout.CENTER);
-        this.actionsPanel.add(as, BorderLayout.SOUTH);
-        this.actionsPanel.setPreferredSize(new Dimension(this.actionsPanel.getPreferredSize().width, 180));
+        actionsPanel.add(as, BorderLayout.SOUTH);
+        actionsPanel.setPreferredSize(new Dimension(actionsPanel.getPreferredSize().width, 180));
 
-        this.getContentPane().add(this.splitter);
+        this.getContentPane().add(splitter);
 
         this.addActionListeners();
 
@@ -127,6 +127,11 @@ public class PackCard extends CollapsiblePanel implements RelocalizationListener
 
         if (!this.pack.isSemiPublic() || this.pack.isTester()) {
             this.removePackButton.setVisible(false);
+        }
+
+        if (this.pack.system) {
+            actionsPanel.add(top, BorderLayout.SOUTH);
+            actionsPanel.setBorder(BorderFactory.createEmptyBorder(5, 0, 5, 0));
         }
     }
 

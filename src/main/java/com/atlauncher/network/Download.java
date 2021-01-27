@@ -1,6 +1,6 @@
 /*
  * ATLauncher - https://github.com/ATLauncher/ATLauncher
- * Copyright (C) 2013-2020 ATLauncher
+ * Copyright (C) 2013-2021 ATLauncher
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -25,6 +25,8 @@ import java.nio.channels.FileChannel;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.HashMap;
+import java.util.Map;
 
 import com.atlauncher.FileSystem;
 import com.atlauncher.Gsons;
@@ -39,6 +41,7 @@ import com.google.gson.Gson;
 import org.zeroturnaround.zip.ZipUtil;
 
 import okhttp3.CacheControl;
+import okhttp3.Headers;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.RequestBody;
@@ -54,16 +57,18 @@ public final class Download {
     public Path unzipTo;
     public Path extractedTo;
     public Path copyTo;
+    private boolean ignoreFailures = false;
     private String hash;
     private Long fingerprint = null;
     public long size = -1L;
-    private InstanceInstaller instanceInstaller;
+    public InstanceInstaller instanceInstaller;
     private OkHttpClient httpClient = Network.CLIENT;
     private RequestBody post = null;
     private CacheControl cacheControl = null;
+    private Map<String, String> headers = new HashMap<String, String>();
 
     // generated on/after request
-    private Response response;
+    public Response response;
 
     public Download() {
 
@@ -75,16 +80,18 @@ public final class Download {
 
     public boolean exists() {
         try {
-            this.execute();
+            if (this.response == null) {
+                this.execute();
+            }
 
             return this.response.isSuccessful();
         } catch (IOException e) {
+            LogManager.logStackTrace(e);
+
             if (this.response != null) {
                 this.response.close();
                 this.response = null;
             }
-
-            LogManager.logStackTrace(e);
         }
 
         return false;
@@ -96,37 +103,43 @@ public final class Download {
 
             return this.response.body().string();
         } catch (IOException e) {
+            LogManager.logStackTrace(e);
+
             if (this.response != null) {
                 this.response.close();
                 this.response = null;
             }
-
-            LogManager.logStackTrace(e);
         }
 
         return null;
     }
 
-    public <T> T asClass(Class<T> tClass, Gson gson) {
-        try {
-            if (this.to != null) {
-                if (this.needToDownload()) {
-                    this.downloadFile();
-                }
-
-                return gson.fromJson(new InputStreamReader(Files.newInputStream(this.to)), tClass);
+    public <T> T asClassWithThrow(Class<T> tClass, Gson gson) throws IOException {
+        if (this.to != null) {
+            if (this.needToDownload()) {
+                this.downloadFile();
             }
 
-            this.execute();
+            try (InputStreamReader isr = new InputStreamReader(Files.newInputStream(this.to))) {
+                return gson.fromJson(isr, tClass);
+            }
+        }
 
-            return gson.fromJson(this.response.body().charStream(), tClass);
+        this.execute();
+
+        return gson.fromJson(this.response.body().charStream(), tClass);
+    }
+
+    public <T> T asClass(Class<T> tClass, Gson gson) {
+        try {
+            return asClassWithThrow(tClass, gson);
         } catch (IOException e) {
+            LogManager.logStackTrace(e);
+
             if (this.response != null) {
                 this.response.close();
                 this.response = null;
             }
-
-            LogManager.logStackTrace(e);
         }
 
         return null;
@@ -136,6 +149,10 @@ public final class Download {
         return asClass(tClass, Gsons.MINECRAFT);
     }
 
+    public <T> T asClassWithThrow(Class<T> tClass) throws IOException {
+        return asClassWithThrow(tClass, Gsons.MINECRAFT);
+    }
+
     public <T> T asType(Type tClass, Gson gson) {
         try {
             if (this.to != null) {
@@ -143,19 +160,21 @@ public final class Download {
                     this.downloadFile();
                 }
 
-                return gson.fromJson(new InputStreamReader(Files.newInputStream(this.to)), tClass);
+                try (InputStreamReader isr = new InputStreamReader(Files.newInputStream(this.to))) {
+                    return gson.fromJson(isr, tClass);
+                }
             }
 
             this.execute();
 
             return gson.fromJson(this.response.body().charStream(), tClass);
         } catch (IOException e) {
+            LogManager.logStackTrace(e);
+
             if (this.response != null) {
                 this.response.close();
                 this.response = null;
             }
-
-            LogManager.logStackTrace(e);
         }
 
         return null;
@@ -179,6 +198,12 @@ public final class Download {
 
     public Download unzipTo(Path unzipTo) {
         this.unzipTo = unzipTo;
+
+        return this;
+    }
+
+    public Download ignoreFailures() {
+        this.ignoreFailures = true;
 
         return this;
     }
@@ -209,6 +234,11 @@ public final class Download {
 
     public Download setUrl(String url) {
         this.url = url;
+        return this;
+    }
+
+    public Download header(String name, String value) {
+        this.headers.put(name, value);
         return this;
     }
 
@@ -249,44 +279,59 @@ public final class Download {
             builder.post(this.post);
         }
 
+        if (this.headers.size() != 0) {
+            builder.headers(Headers.of(this.headers));
+        }
+
         if (this.cacheControl != null) {
             builder.cacheControl(this.cacheControl);
         }
 
         this.response = httpClient.newCall(builder.build()).execute();
 
-        if (this.response == null || !this.response.isSuccessful()) {
-            throw new IOException(this.url + " request wasn't successful: " + this.response);
+        if (this.response == null || (!this.ignoreFailures && !this.response.isSuccessful())) {
+            throw new DownloadException(this);
         }
     }
 
     public int code() {
         try {
-            this.execute();
+            if (this.response == null) {
+                this.execute();
+            }
             return this.response.code();
         } catch (Exception e) {
+            LogManager.logStackTrace(e);
+
             if (this.response != null) {
                 this.response.close();
                 this.response = null;
             }
 
-            LogManager.logStackTrace(e);
             return -1;
         }
     }
 
     private boolean md5() {
-        return this.hash == null || this.hash.length() != 40;
+        return this.hash != null && this.hash.length() == 32;
+    }
+
+    private boolean sha512() {
+        return this.hash != null && this.hash.length() == 128;
     }
 
     public int getResponseCode() throws IOException {
-        this.execute();
+        if (this.response == null) {
+            this.execute();
+        }
 
         return this.response.code();
     }
 
     private String getHashFromURL() throws IOException {
-        this.execute();
+        if (this.response == null) {
+            this.execute();
+        }
 
         String etag = this.response.header("ETag");
         if (etag == null) {
@@ -316,7 +361,9 @@ public final class Download {
     public long getFilesize() {
         try {
             if (this.size == -1L) {
-                this.execute();
+                if (this.response == null) {
+                    this.execute();
+                }
                 long size = Long.parseLong(this.response.header("Content-Length"));
 
                 if (size == -1L) {
@@ -342,6 +389,11 @@ public final class Download {
         }
 
         if (Files.exists(this.to)) {
+            // if we're ignoring failures and the file is not 0 size, then we're fine
+            if (this.ignoreFailures && this.to.toFile().length() != 0) {
+                return false;
+            }
+
             if (this.fingerprint != null) {
                 try {
                     if (Hashing.murmur(this.to) == this.fingerprint) {
@@ -352,6 +404,8 @@ public final class Download {
                     return false;
                 }
             } else if (this.md5() && Hashing.md5(this.to).equals(Hashing.HashCode.fromString(this.getHash()))) {
+                return false;
+            } else if (this.sha512() && Hashing.sha512(this.to).equals(Hashing.HashCode.fromString(this.getHash()))) {
                 return false;
             } else if (Hashing.sha1(this.to).equals(Hashing.HashCode.fromString(this.getHash()))) {
                 return false;
@@ -367,6 +421,13 @@ public final class Download {
     }
 
     private void downloadDirect() {
+        if (size == -1L) {
+            size = this.getFilesize();
+
+            if (instanceInstaller != null && size > 0L) {
+                instanceInstaller.addBytesToDownload(size);
+            }
+        }
         try (FileChannel fc = FileChannel.open(this.to, Utils.WRITE);
                 ReadableByteChannel rbc = Channels.newChannel(this.response.body().byteStream())) {
             fc.transferFrom(rbc, 0, Long.MAX_VALUE);
@@ -386,6 +447,8 @@ public final class Download {
                 }
             } else if (this.md5()) {
                 return Hashing.md5(this.to).equals(Hashing.HashCode.fromString(this.getHash()));
+            } else if (this.sha512()) {
+                return Hashing.sha512(this.to).equals(Hashing.HashCode.fromString(this.getHash()));
             } else {
                 return Hashing.sha1(this.to).equals(Hashing.HashCode.fromString(this.getHash()));
             }
@@ -404,25 +467,27 @@ public final class Download {
             FileUtils.delete(this.to);
         }
 
-        try {
-            // open the connection
-            this.execute();
-        } catch (IOException e) {
-            if (this.response != null) {
-                this.response.close();
-                this.response = null;
+        // if already opened or not first attempt, open the connection
+        if (this.response == null || attempt != 1) {
+            try {
+                this.execute();
+            } catch (IOException e) {
+                LogManager.logStackTrace(e);
+
+                if (this.response != null) {
+                    this.response.close();
+                    this.response = null;
+                }
+
+                return false;
             }
-
-            LogManager.logStackTrace(e);
-
-            return false;
         }
 
         // download the file to disk
         this.downloadDirect();
 
-        // check if the hash matches
-        if (hashMatches()) {
+        // check if the hash matches (or they're ignored and file isn't 0 bytes)
+        if ((this.ignoreFailures && this.to.toFile().length() != 0) || hashMatches()) {
             return true;
         }
 
@@ -468,6 +533,8 @@ public final class Download {
                     if (Files.exists(this.copyTo)) {
                         if (this.md5()) {
                             fileHash = Hashing.md5(this.copyTo);
+                        } else if (this.sha512()) {
+                            fileHash = Hashing.sha512(this.copyTo);
                         } else {
                             fileHash = Hashing.sha1(this.copyTo);
                         }
@@ -483,7 +550,18 @@ public final class Download {
             return;
         }
 
-        this.execute();
+        // open the connection if not already opened
+        if (this.response == null) {
+            try {
+                this.execute();
+            } catch (IOException e) {
+                if (this.instanceInstaller != null) {
+                    this.instanceInstaller.cancel(true);
+                }
+
+                throw e;
+            }
+        }
 
         Path oldPath = null;
         if (Files.exists(this.to)) {
@@ -505,8 +583,11 @@ public final class Download {
             expected = Hashing.HashCode.fromString(this.getHash());
         }
 
-        if (expected != null && expected.equals(Hashing.HashCode.EMPTY)) {
-            this.downloadDirect();
+        if ((this.ignoreFailures && this.to.toFile().length() != 0)
+                || (expected != null && expected.equals(Hashing.HashCode.EMPTY))) {
+            if (this.response.isSuccessful()) {
+                this.downloadDirect();
+            }
         } else {
             boolean downloaded = this.downloadRec(1);
 
@@ -521,12 +602,17 @@ public final class Download {
                 FileUtils.copyFile(this.to, FileSystem.FAILED_DOWNLOADS);
                 if (fingerprint != null) {
                     LogManager.error("Error downloading " + this.to.getFileName() + " from " + this.url + ". Expected"
-                            + " fingerprint of " + fingerprint.toString() + " (with size of " + this.size + ") but got " + Hashing.murmur(this.to)
-                            + " (with size of " + Files.size(this.to) + ") instead. Copied to FailedDownloads folder & cancelling install!");
+                            + " fingerprint of " + fingerprint.toString() + " (with size of " + this.size + ") but got "
+                            + Hashing.murmur(this.to) + " (with size of "
+                            + (Files.exists(this.to) ? Files.size(this.to) : 0)
+                            + ") instead. Copied to FailedDownloads folder & cancelling install!");
                 } else {
                     LogManager.error("Error downloading " + this.to.getFileName() + " from " + this.url + ". Expected"
-                            + " hash of " + expected.toString() + " (with size of " + this.size + ") but got " + Hashing.sha1(this.to)
-                            + " (with size of " + Files.size(this.to) + ") instead. Copied to FailedDownloads folder & cancelling install!");
+                            + " hash of " + expected.toString() + " (with size of " + this.size + ") but got "
+                            + (this.md5() ? Hashing.md5(this.to)
+                                    : (this.sha512() ? Hashing.sha512(this.to) : Hashing.sha1(this.to)))
+                            + " (with size of " + (Files.exists(this.to) ? Files.size(this.to) : 0)
+                            + ") instead. Copied to FailedDownloads folder & cancelling install!");
                 }
                 if (this.instanceInstaller != null) {
                     this.instanceInstaller.cancel(true);
@@ -546,6 +632,8 @@ public final class Download {
                     if (Files.exists(this.copyTo)) {
                         if (this.md5()) {
                             fileHash2 = Hashing.md5(this.copyTo);
+                        } else if (this.sha512()) {
+                            fileHash2 = Hashing.sha512(this.copyTo);
                         } else {
                             fileHash2 = Hashing.sha1(this.copyTo);
                         }
@@ -566,6 +654,10 @@ public final class Download {
     }
 
     private void runPostProcessors() {
+        if (this.response != null) {
+            this.response.close();
+        }
+
         if (Files.exists(this.to) && this.unzipTo != null) {
             FileUtils.createDirectory(this.unzipTo);
 

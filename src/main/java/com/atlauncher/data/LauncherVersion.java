@@ -1,6 +1,6 @@
 /*
  * ATLauncher - https://github.com/ATLauncher/ATLauncher
- * Copyright (C) 2013-2020 ATLauncher
+ * Copyright (C) 2013-2021 ATLauncher
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -17,15 +17,17 @@
  */
 package com.atlauncher.data;
 
+import java.util.Locale;
+
 import com.atlauncher.annot.Json;
 
 @Json
 public class LauncherVersion {
-    private int reserved;
-    private int major;
-    private int minor;
-    private int revision;
-    private String stream;
+    private final int reserved;
+    private final int major;
+    private final int minor;
+    private final int revision;
+    private final String stream;
 
     public LauncherVersion(int reserved, int major, int minor, int revision) {
         this(reserved, major, minor, revision, "Release");
@@ -100,5 +102,14 @@ public class LauncherVersion {
         }
 
         return String.format("%d.%d.%d.%d %s", this.reserved, this.major, this.minor, this.revision, this.stream);
+    }
+
+    public String toStringForLogging() {
+        if (this.isReleaseStream()) {
+            return String.format(Locale.ENGLISH, "%d.%d.%d.%d", this.reserved, this.major, this.minor, this.revision);
+        }
+
+        return String.format(Locale.ENGLISH, "%d.%d.%d.%d %s", this.reserved, this.major, this.minor, this.revision,
+                this.stream);
     }
 }

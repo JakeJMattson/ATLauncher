@@ -1,6 +1,6 @@
 /*
  * ATLauncher - https://github.com/ATLauncher/ATLauncher
- * Copyright (C) 2013-2020 ATLauncher
+ * Copyright (C) 2013-2021 ATLauncher
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -35,24 +35,24 @@ import com.atlauncher.utils.Utils;
 import org.mini2Dx.gettext.GetText;
 
 @SuppressWarnings("serial")
-public class ProgressDialog extends JDialog implements NetworkProgressable {
-    private String labelText; // The text to add to the JLabel
-    private JProgressBar progressBar; // The Progress Bar
-    private JProgressBar subProgressBar; // The Progress Bar
-    private int max; // The maximum the progress bar should get to
+public class ProgressDialog<T> extends JDialog implements NetworkProgressable {
+    private final String labelText; // The text to add to the JLabel
+    private final JProgressBar progressBar; // The Progress Bar
+    private final JProgressBar subProgressBar; // The Progress Bar
     private Thread thread = null; // The Thread were optionally running
-    private String closedLogMessage; // The message to log to the console when dialog closed
-    private Object returnValue = null; // The value returned
-    private JLabel label = new JLabel();
+    private final String closedLogMessage; // The message to log to the console when dialog closed
+    private T returnValue = null; // The value returned
+    public boolean wasClosed = false; // If the dialog was closed by the user
+    private final JLabel label = new JLabel();
     private int tasksToDo;
     private int tasksDone;
     private double totalBytes = 0; // Total number of bytes to download
     private double downloadedBytes = 0; // Total number of bytes downloaded
 
-    public ProgressDialog(String title, int initMax, String initLabelText, String initClosedLogMessage) {
-        super(App.launcher.getParent(), ModalityType.APPLICATION_MODAL);
+    public ProgressDialog(String title, int initMax, String initLabelText, String initClosedLogMessage,
+            boolean showProgressBar) {
+        super(App.launcher.getParent(), ModalityType.DOCUMENT_MODAL);
         this.labelText = initLabelText;
-        this.max = initMax;
         this.closedLogMessage = initClosedLogMessage;
         setDefaultCloseOperation(JDialog.DO_NOTHING_ON_CLOSE);
         setIconImage(Utils.getImage("/assets/image/Icon.png"));
@@ -67,9 +67,10 @@ public class ProgressDialog extends JDialog implements NetworkProgressable {
 
         JPanel bottomPanel = new JPanel(new BorderLayout());
         progressBar = new JProgressBar(0, initMax);
-        if (max <= 0) {
+        if (initMax <= 0) {
             progressBar.setIndeterminate(true);
         }
+        progressBar.setVisible(showProgressBar);
         bottomPanel.add(progressBar, BorderLayout.NORTH);
 
         subProgressBar = new JProgressBar(0, 10000);
@@ -82,6 +83,7 @@ public class ProgressDialog extends JDialog implements NetworkProgressable {
         addWindowListener(new WindowAdapter() {
             @Override
             public void windowClosing(WindowEvent e) {
+                wasClosed = true;
                 if (closedLogMessage != null) {
                     LogManager.error(closedLogMessage);
                 }
@@ -95,8 +97,20 @@ public class ProgressDialog extends JDialog implements NetworkProgressable {
         });
     }
 
+    public ProgressDialog(String title, int initMax, String initLabelText, String initClosedLogMessage) {
+        this(title, initMax, initLabelText, initClosedLogMessage, true);
+    }
+
     public ProgressDialog(String title, int initMax, String initLabelText) {
-        this(title, initMax, initLabelText, null);
+        this(title, initMax, initLabelText, null, true);
+    }
+
+    public ProgressDialog(String title) {
+        this(title, 0, title, null, true);
+    }
+
+    public ProgressDialog(String title, boolean showProgressBar) {
+        this(title, 0, title, null, showProgressBar);
     }
 
     public void addThread(Thread thread) {
@@ -117,11 +131,11 @@ public class ProgressDialog extends JDialog implements NetworkProgressable {
         this.label.setText(this.labelText);
     }
 
-    public void setReturnValue(Object returnValue) {
+    public void setReturnValue(T returnValue) {
         this.returnValue = returnValue;
     }
 
-    public Object getReturnValue() {
+    public T getReturnValue() {
         return this.returnValue;
     }
 
@@ -213,5 +227,11 @@ public class ProgressDialog extends JDialog implements NetworkProgressable {
     public void clearDownloadedBytes() {
         this.downloadedBytes = 0L;
         subProgressBar.setVisible(false);
+    }
+
+    @Override
+    public void addBytesToDownload(long bytes) {
+        this.totalBytes += bytes;
+        this.updateProgressBar();
     }
 }

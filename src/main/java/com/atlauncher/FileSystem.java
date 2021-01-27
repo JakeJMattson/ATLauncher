@@ -1,6 +1,6 @@
 /*
  * ATLauncher - https://github.com/ATLauncher/ATLauncher
- * Copyright (C) 2013-2020 ATLauncher
+ * Copyright (C) 2013-2021 ATLauncher
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -24,7 +24,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 
-import com.atlauncher.data.Constants;
+import com.atlauncher.constants.Constants;
 import com.atlauncher.managers.LogManager;
 import com.atlauncher.utils.FileUtils;
 import com.atlauncher.utils.OS;
@@ -66,6 +66,7 @@ public final class FileSystem {
     public static final Path USER_DATA = CONFIGS.resolve("userdata");
     public static final Path LAUNCHER_CONFIG = CONFIGS.resolve(Constants.LAUNCHER_NAME + ".conf");
     public static final Path SETTINGS = CONFIGS.resolve(Constants.LAUNCHER_NAME + ".json");
+    public static final Path ACCOUNTS = CONFIGS.resolve("accounts.json");
 
     /**
      * This will organise the file system. This will remove old folders, create

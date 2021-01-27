@@ -1,6 +1,6 @@
 /*
  * ATLauncher - https://github.com/ATLauncher/ATLauncher
- * Copyright (C) 2013-2020 ATLauncher
+ * Copyright (C) 2013-2021 ATLauncher
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -38,7 +38,8 @@ public final class PackImagePanel extends JPanel {
     @Override
     public void paintComponent(Graphics g) {
         Graphics2D g2 = (Graphics2D) g;
+        int x = (this.getWidth() - 300) / 2;
         int y = (this.getHeight() - 150) / 2;
-        g2.drawImage(this.image, 0, y, 300, 150, null);
+        g2.drawImage(this.image, x, y, 300, 150, null);
     }
 }

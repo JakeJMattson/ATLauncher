@@ -1,6 +1,6 @@
 /*
  * ATLauncher - https://github.com/ATLauncher/ATLauncher
- * Copyright (C) 2013-2020 ATLauncher
+ * Copyright (C) 2013-2021 ATLauncher
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -48,8 +48,8 @@ public class ServersForCheckerTab extends JPanel implements ActionListener {
     private final JMenuItem EDIT_BUTTON = new JMenuItem(GetText.tr("Edit"));
     private final JMenuItem DELETE_BUTTON = new JMenuItem(GetText.tr("Delete"));
 
-    private DefaultListModel<MinecraftServer> listModel;
-    private JList serverList;
+    private final DefaultListModel<MinecraftServer> listModel;
+    private final JList serverList;
 
     public ServersForCheckerTab() {
         setLayout(new BorderLayout());

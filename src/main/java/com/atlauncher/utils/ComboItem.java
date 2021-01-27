@@ -1,6 +1,6 @@
 /*
  * ATLauncher - https://github.com/ATLauncher/ATLauncher
- * Copyright (C) 2013-2020 ATLauncher
+ * Copyright (C) 2013-2021 ATLauncher
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -18,8 +18,8 @@
 package com.atlauncher.utils;
 
 public class ComboItem<T> {
-    private T value;
-    private String label;
+    private final T value;
+    private final String label;
 
     public ComboItem(T value, String label) {
         this.value = value;

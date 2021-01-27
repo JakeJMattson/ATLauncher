@@ -1,6 +1,6 @@
 /*
  * ATLauncher - https://github.com/ATLauncher/ATLauncher
- * Copyright (C) 2013-2020 ATLauncher
+ * Copyright (C) 2013-2021 ATLauncher
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -27,6 +27,7 @@ import com.atlauncher.evnt.LogEvent;
 import com.atlauncher.evnt.LogEvent.LogType;
 import com.atlauncher.exceptions.LocalException;
 import com.atlauncher.network.Analytics;
+import com.atlauncher.network.DownloadException;
 import com.atlauncher.network.ErrorReporting;
 import com.atlauncher.thread.LoggingThread;
 
@@ -84,8 +85,7 @@ public final class LogManager {
     public static void logStackTrace(Throwable t, boolean sendRemote) {
         t.printStackTrace();
 
-        CharArrayWriter writer = new CharArrayWriter();
-        try {
+        try (CharArrayWriter writer = new CharArrayWriter()) {
             Analytics.sendException(t.getMessage());
 
             if (!(t instanceof LocalException) && sendRemote) {
@@ -94,8 +94,20 @@ public final class LogManager {
 
             t.printStackTrace(new PrintWriter(writer));
             error(writer.toString());
-        } finally {
-            writer.close();
+        }
+
+        if (t instanceof DownloadException) {
+            DownloadException exception = ((DownloadException) t);
+
+            if (exception.download.response != null && exception.response != null
+                    && (exception.download.response.header("Content-Type").equalsIgnoreCase("application/json")
+                            || exception.download.response.header("Content-Type").equalsIgnoreCase("application/xml")
+                            || exception.download.response.header("Content-Type").startsWith("text/"))) {
+                try {
+                    debug(exception.response, 5);
+                } catch (Exception e) {
+                }
+            }
         }
     }
 
@@ -109,8 +121,8 @@ public final class LogManager {
     }
 
     public static Object[] prepareMessageForMinecraftLog(String text) {
-        LogType type = null; // The log message type
-        String message = null; // The log message
+        LogType type; // The log message type
+        String message; // The log message
 
         if (text.contains("[INFO] [STDERR]")) {
             message = text.substring(text.indexOf("[INFO] [STDERR]"));

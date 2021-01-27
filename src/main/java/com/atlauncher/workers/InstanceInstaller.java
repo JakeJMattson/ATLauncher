@@ -1,6 +1,6 @@
 /*
  * ATLauncher - https://github.com/ATLauncher/ATLauncher
- * Copyright (C) 2013-2020 ATLauncher
+ * Copyright (C) 2013-2021 ATLauncher
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -18,16 +18,20 @@
 package com.atlauncher.workers;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import javax.swing.SwingWorker;
 
@@ -35,19 +39,19 @@ import com.atlauncher.App;
 import com.atlauncher.FileSystem;
 import com.atlauncher.Gsons;
 import com.atlauncher.Network;
+import com.atlauncher.constants.Constants;
 import com.atlauncher.data.APIResponse;
-import com.atlauncher.data.Constants;
 import com.atlauncher.data.DisableableMod;
 import com.atlauncher.data.Instance;
-import com.atlauncher.data.InstanceV2;
-import com.atlauncher.data.InstanceV2Launcher;
+import com.atlauncher.data.InstanceLauncher;
 import com.atlauncher.data.Server;
 import com.atlauncher.data.Type;
-import com.atlauncher.data.curse.CurseAttachment;
-import com.atlauncher.data.curse.CurseFile;
-import com.atlauncher.data.curse.CurseMod;
-import com.atlauncher.data.curse.pack.CurseManifest;
-import com.atlauncher.data.curse.pack.CurseModLoader;
+import com.atlauncher.data.curseforge.CurseForgeAttachment;
+import com.atlauncher.data.curseforge.CurseForgeFile;
+import com.atlauncher.data.curseforge.CurseForgeFingerprint;
+import com.atlauncher.data.curseforge.CurseForgeProject;
+import com.atlauncher.data.curseforge.pack.CurseForgeManifest;
+import com.atlauncher.data.curseforge.pack.CurseForgeModLoader;
 import com.atlauncher.data.json.Delete;
 import com.atlauncher.data.json.Deletes;
 import com.atlauncher.data.json.DownloadType;
@@ -59,11 +63,12 @@ import com.atlauncher.data.json.Version;
 import com.atlauncher.data.minecraft.ArgumentRule;
 import com.atlauncher.data.minecraft.Arguments;
 import com.atlauncher.data.minecraft.AssetIndex;
-import com.atlauncher.data.minecraft.AssetObject;
 import com.atlauncher.data.minecraft.Download;
 import com.atlauncher.data.minecraft.Downloads;
+import com.atlauncher.data.minecraft.FabricMod;
 import com.atlauncher.data.minecraft.Library;
 import com.atlauncher.data.minecraft.LoggingFile;
+import com.atlauncher.data.minecraft.MCMod;
 import com.atlauncher.data.minecraft.MinecraftVersion;
 import com.atlauncher.data.minecraft.MojangAssetIndex;
 import com.atlauncher.data.minecraft.MojangDownload;
@@ -73,16 +78,27 @@ import com.atlauncher.data.minecraft.VersionManifestVersion;
 import com.atlauncher.data.minecraft.loaders.Loader;
 import com.atlauncher.data.minecraft.loaders.LoaderVersion;
 import com.atlauncher.data.minecraft.loaders.forge.ATLauncherApiForgeVersion;
+import com.atlauncher.data.modpacksch.ModpacksChPackArt;
+import com.atlauncher.data.modpacksch.ModpacksChPackArtType;
+import com.atlauncher.data.modpacksch.ModpacksChPackManifest;
+import com.atlauncher.data.modpacksch.ModpacksChPackVersionManifectFileType;
+import com.atlauncher.data.modpacksch.ModpacksChPackVersionManifectTarget;
+import com.atlauncher.data.modpacksch.ModpacksChPackVersionManifectTargetType;
+import com.atlauncher.data.modpacksch.ModpacksChPackVersionManifest;
+import com.atlauncher.data.multimc.MultiMCComponent;
+import com.atlauncher.data.multimc.MultiMCManifest;
 import com.atlauncher.exceptions.LocalException;
 import com.atlauncher.interfaces.NetworkProgressable;
 import com.atlauncher.managers.InstanceManager;
 import com.atlauncher.managers.LogManager;
+import com.atlauncher.managers.MinecraftManager;
 import com.atlauncher.managers.ServerManager;
 import com.atlauncher.network.Analytics;
 import com.atlauncher.network.DownloadPool;
 import com.atlauncher.network.ErrorReporting;
-import com.atlauncher.utils.CurseApi;
+import com.atlauncher.utils.CurseForgeApi;
 import com.atlauncher.utils.FileUtils;
+import com.atlauncher.utils.Hashing;
 import com.atlauncher.utils.Utils;
 import com.atlauncher.utils.walker.CaseFileVisitor;
 import com.google.gson.reflect.TypeToken;
@@ -90,6 +106,7 @@ import com.google.gson.reflect.TypeToken;
 import org.mini2Dx.gettext.GetText;
 import org.zeroturnaround.zip.ZipUtil;
 
+import okhttp3.CacheControl;
 import okhttp3.OkHttpClient;
 
 public class InstanceInstaller extends SwingWorker<Boolean, Void> implements NetworkProgressable {
@@ -99,20 +116,23 @@ public class InstanceInstaller extends SwingWorker<Boolean, Void> implements Net
     protected double downloadedBytes = 0; // Total number of bytes downloaded
 
     public Instance instance = null;
-    public InstanceV2 instanceV2 = null;
     public final String name;
     public final com.atlauncher.data.Pack pack;
     public final com.atlauncher.data.PackVersion version;
     public final String shareCode;
     public final boolean showModsChooser;
     public LoaderVersion loaderVersion;
-    public final CurseManifest curseManifest;
-    public final File manifestFile;
+    public CurseForgeManifest curseForgeManifest;
+    public Path curseForgeExtractedPath;
+    public final ModpacksChPackManifest modpacksChPackManifest;
+    public ModpacksChPackVersionManifest modpacksChPackVersionManifest;
+    public final MultiMCManifest multiMCManifest;
+    public final Path multiMCExtractedPath;
 
     public boolean isReinstall;
     public boolean isServer;
     public boolean instanceIsCorrupt;
-    public boolean saveMods = false;
+    public boolean saveMods;
 
     public final Path root;
     public final Path temp;
@@ -140,7 +160,8 @@ public class InstanceInstaller extends SwingWorker<Boolean, Void> implements Net
 
     public InstanceInstaller(String name, com.atlauncher.data.Pack pack, com.atlauncher.data.PackVersion version,
             boolean isReinstall, boolean isServer, boolean saveMods, String shareCode, boolean showModsChooser,
-            LoaderVersion loaderVersion, CurseManifest curseManifest, File manifestFile) {
+            LoaderVersion loaderVersion, CurseForgeManifest curseForgeManifest, Path curseForgeExtractedPath,
+            ModpacksChPackManifest modpacksChPackManifest, MultiMCManifest multiMCManifest, Path multiMCExtractedPath) {
         this.name = name;
         this.pack = pack;
         this.version = version;
@@ -159,16 +180,15 @@ public class InstanceInstaller extends SwingWorker<Boolean, Void> implements Net
         this.temp = FileSystem.TEMP.resolve(pack.getSafeName() + "_" + version.getSafeVersion());
 
         this.loaderVersion = loaderVersion;
-        this.curseManifest = curseManifest;
-        this.manifestFile = manifestFile;
+        this.curseForgeManifest = curseForgeManifest;
+        this.curseForgeExtractedPath = curseForgeExtractedPath;
+        this.modpacksChPackManifest = modpacksChPackManifest;
+        this.multiMCManifest = multiMCManifest;
+        this.multiMCExtractedPath = multiMCExtractedPath;
     }
 
     public void setInstance(Instance instance) {
         this.instance = instance;
-    }
-
-    public void setInstance(InstanceV2 instanceV2) {
-        this.instanceV2 = instanceV2;
     }
 
     @Override
@@ -181,10 +201,16 @@ public class InstanceInstaller extends SwingWorker<Boolean, Void> implements Net
         }
 
         try {
-            if (curseManifest == null) {
-                downloadPackVersionJson();
+            if (curseForgeManifest != null) {
+                generatePackVersionFromCurseForgeManifest();
+            } else if (pack.curseForgeProject != null) {
+                generatePackVersionFromCurseForge();
+            } else if (modpacksChPackManifest != null) {
+                generatePackVersionFromModpacksCh();
+            } else if (multiMCManifest != null) {
+                generatePackVersionFromMultiMC();
             } else {
-                generatePackVersionFromCurse();
+                downloadPackVersionJson();
             }
 
             downloadMinecraftVersionJson();
@@ -229,7 +255,7 @@ public class InstanceInstaller extends SwingWorker<Boolean, Void> implements Net
 
             Analytics.sendEvent(pack.name + " - " + version.version,
                     (this.isServer ? "Server" : "") + (this.isReinstall ? "Reinstalled" : "Installed"),
-                    (this.curseManifest == null ? "Pack" : "CursePack"));
+                    getAnalyticsCategory());
 
             return true;
         } catch (Exception e) {
@@ -238,6 +264,18 @@ public class InstanceInstaller extends SwingWorker<Boolean, Void> implements Net
         }
 
         return false;
+    }
+
+    private String getAnalyticsCategory() {
+        if (this.curseForgeManifest != null) {
+            return "CurseForgePack";
+        } else if (this.modpacksChPackManifest != null) {
+            return "ModpacksChPack";
+        } else if (this.multiMCManifest != null) {
+            return "MultiMCPack";
+        }
+
+        return "Pack";
     }
 
     private void downloadPackVersionJson() throws Exception {
@@ -257,29 +295,30 @@ public class InstanceInstaller extends SwingWorker<Boolean, Void> implements Net
         hideSubProgressBar();
     }
 
-    private void generatePackVersionFromCurse() throws Exception {
+    private void generatePackVersionFromCurseForgeManifest() throws Exception {
         addPercent(5);
         fireTask(GetText.tr("Generating Pack Version Definition From Curse"));
         fireSubProgressUnknown();
 
-        if (!curseManifest.manifestType.equals("minecraftModpack")) {
+        if (!curseForgeManifest.manifestType.equals("minecraftModpack")) {
             throw new Exception("Manifest is not a Minecraft Modpack");
         }
 
-        if (curseManifest.manifestVersion != 1) {
-            throw new Exception("Manifest is version " + curseManifest.manifestVersion + " which I cannot install");
+        if (curseForgeManifest.manifestVersion != 1) {
+            throw new Exception(
+                    "Manifest is version " + curseForgeManifest.manifestVersion + " which I cannot install");
         }
 
         this.packVersion = new Version();
-        packVersion.version = curseManifest.version;
-        packVersion.minecraft = curseManifest.minecraft.version;
-        packVersion.enableCurseIntegration = true;
+        packVersion.version = curseForgeManifest.version;
+        packVersion.minecraft = curseForgeManifest.minecraft.version;
+        packVersion.enableCurseForgeIntegration = true;
         packVersion.enableEditingMods = true;
 
         packVersion.loader = new com.atlauncher.data.json.Loader();
 
-        CurseModLoader forgeVersion = curseManifest.minecraft.modLoaders.stream().filter(e -> e.primary).findFirst()
-                .orElse(null);
+        CurseForgeModLoader forgeVersion = curseForgeManifest.minecraft.modLoaders.stream().filter(e -> e.primary)
+                .findFirst().orElse(null);
 
         if (forgeVersion == null) {
             throw new Exception("Failed to find Forge version");
@@ -294,26 +333,204 @@ public class InstanceInstaller extends SwingWorker<Boolean, Void> implements Net
                 .setUrl(String.format("%sforge-version/%s", Constants.API_BASE_URL, forgeVersionString)).asType(type);
 
         Map<String, Object> loaderMeta = new HashMap<>();
-        loaderMeta.put("minecraft", curseManifest.minecraft.version);
+        loaderMeta.put("minecraft", curseForgeManifest.minecraft.version);
         loaderMeta.put("version", forgeVersionInfo.getData().version);
-        loaderMeta.put("rawVersion", forgeVersionInfo.getData().raw_version);
+        loaderMeta.put("rawVersion", forgeVersionInfo.getData().rawVersion);
+        loaderMeta.put("installerSize", forgeVersionInfo.getData().installerSize);
+        loaderMeta.put("installerSha1", forgeVersionInfo.getData().installerSha1Hash);
         packVersion.loader.metadata = loaderMeta;
 
-        if (Utils.matchVersion(curseManifest.minecraft.version, "1.13", false, true)) {
+        if (Utils.matchVersion(curseForgeManifest.minecraft.version, "1.13", false, true)) {
             packVersion.loader.className = "com.atlauncher.data.minecraft.loaders.forge.Forge113Loader";
         } else {
             packVersion.loader.className = "com.atlauncher.data.minecraft.loaders.forge.ForgeLoader";
         }
 
-        packVersion.mods = curseManifest.files.parallelStream().map(file -> {
-            CurseMod curseMod = CurseApi.getModById(file.projectID);
-            CurseFile curseFile = CurseApi.getFileForMod(file.projectID, file.fileID);
+        int[] projectIdsFound = curseForgeManifest.files.stream().mapToInt(file -> file.projectID).toArray();
 
-            Mod mod = curseFile.convertToMod(curseMod);
+        Map<Integer, CurseForgeProject> foundProjects = CurseForgeApi.getProjectsAsMap(projectIdsFound);
+
+        packVersion.mods = curseForgeManifest.files.parallelStream().map(file -> {
+            CurseForgeProject curseForgeProject = Optional.ofNullable(foundProjects.get(file.projectID))
+                    .orElseGet(() -> CurseForgeApi.getProjectById(file.projectID));
+            CurseForgeFile curseForgeFile = CurseForgeApi.getFileForProject(file.projectID, file.fileID);
+
+            Mod mod = curseForgeFile.convertToMod(curseForgeProject);
             mod.optional = !file.required;
 
             return mod;
         }).collect(Collectors.toList());
+
+        hideSubProgressBar();
+    }
+
+    private void generatePackVersionFromCurseForge() throws Exception {
+        addPercent(5);
+
+        fireTask(GetText.tr("Downloading Manifest From CurseForge"));
+        fireSubProgressUnknown();
+
+        Path manifestFile = this.temp.resolve(version._curseForgeFile.fileName.toLowerCase());
+
+        com.atlauncher.network.Download manifestDownload = com.atlauncher.network.Download.build()
+                .setUrl(version._curseForgeFile.downloadUrl).downloadTo(manifestFile)
+                .size(version._curseForgeFile.fileLength).fingerprint(version._curseForgeFile.packageFingerprint)
+                .withInstanceInstaller(this).withHttpClient(Network.createProgressClient(this));
+
+        this.setTotalBytes(version._curseForgeFile.fileLength);
+        manifestDownload.downloadFile();
+
+        fireTask(GetText.tr("Extracting Manifest"));
+        fireSubProgressUnknown();
+
+        curseForgeManifest = Gsons.MINECRAFT.fromJson(
+                new String(ZipUtil.unpackEntry(manifestFile.toFile(), "manifest.json")), CurseForgeManifest.class);
+        curseForgeExtractedPath = this.temp.resolve("curseforgeimport");
+
+        ZipUtil.unpack(manifestFile.toFile(), curseForgeExtractedPath.toFile());
+        Files.delete(manifestFile);
+
+        generatePackVersionFromCurseForgeManifest();
+
+        hideSubProgressBar();
+    }
+
+    private void generatePackVersionFromModpacksCh() throws Exception {
+        addPercent(5);
+        fireTask(GetText.tr("Generating Pack Version Definition From Modpacks.ch"));
+        fireSubProgressUnknown();
+
+        this.modpacksChPackVersionManifest = com.atlauncher.network.Download.build()
+                .setUrl(String.format("%s/modpack/%s/%s", Constants.MODPACKS_CH_API_URL, modpacksChPackManifest.id,
+                        this.version._modpacksChId))
+                .cached(new CacheControl.Builder().maxStale(1, TimeUnit.HOURS).build())
+                .asClass(ModpacksChPackVersionManifest.class);
+
+        ModpacksChPackVersionManifectTarget minecraftTarget = this.modpacksChPackVersionManifest.targets.stream()
+                .filter(t -> t.type == ModpacksChPackVersionManifectTargetType.GAME).findFirst().orElse(null);
+
+        if (minecraftTarget == null) {
+            throw new Exception("Minecraft target couldn't be found.");
+        }
+
+        this.packVersion = new Version();
+        packVersion.version = this.version.version;
+        packVersion.minecraft = minecraftTarget.version;
+        packVersion.enableCurseForgeIntegration = true;
+        packVersion.enableEditingMods = true;
+        packVersion.memory = Optional.ofNullable(modpacksChPackVersionManifest.specs.minimum)
+                .orElse(modpacksChPackVersionManifest.specs.recommended);
+
+        this.version.minecraftVersion = MinecraftManager.getMinecraftVersion(packVersion.minecraft);
+
+        packVersion.loader = new com.atlauncher.data.json.Loader();
+
+        ModpacksChPackVersionManifectTarget modloaderTarget = this.modpacksChPackVersionManifest.targets.stream()
+                .filter(t -> t.type == ModpacksChPackVersionManifectTargetType.MODLOADER).findFirst().orElse(null);
+
+        if (modloaderTarget == null) {
+            throw new Exception("Modloader target couldn't be found.");
+        }
+
+        if (modloaderTarget.name.equalsIgnoreCase("forge")) {
+            String forgeVersionString = modloaderTarget.version;
+
+            java.lang.reflect.Type type = new TypeToken<APIResponse<ATLauncherApiForgeVersion>>() {
+            }.getType();
+
+            APIResponse<ATLauncherApiForgeVersion> forgeVersionInfo = com.atlauncher.network.Download.build()
+                    .setUrl(String.format("%sforge-version/%s", Constants.API_BASE_URL, forgeVersionString))
+                    .asType(type);
+
+            Map<String, Object> loaderMeta = new HashMap<>();
+            loaderMeta.put("minecraft", packVersion.minecraft);
+            loaderMeta.put("version", forgeVersionInfo.getData().version);
+            loaderMeta.put("rawVersion", forgeVersionInfo.getData().rawVersion);
+            loaderMeta.put("installerSize", forgeVersionInfo.getData().installerSize);
+            loaderMeta.put("installerSha1", forgeVersionInfo.getData().installerSha1Hash);
+            packVersion.loader.metadata = loaderMeta;
+
+            if (Utils.matchVersion(packVersion.minecraft, "1.13", false, true)) {
+                packVersion.loader.className = "com.atlauncher.data.minecraft.loaders.forge.Forge113Loader";
+            } else {
+                packVersion.loader.className = "com.atlauncher.data.minecraft.loaders.forge.ForgeLoader";
+            }
+        } else if (modloaderTarget.name.equalsIgnoreCase("fabric")) {
+            String fabricVersionString = modloaderTarget.version;
+
+            Map<String, Object> loaderMeta = new HashMap<>();
+            loaderMeta.put("minecraft", packVersion.minecraft);
+            loaderMeta.put("loader", fabricVersionString);
+            packVersion.loader.metadata = loaderMeta;
+            packVersion.loader.className = "com.atlauncher.data.minecraft.loaders.fabric.FabricLoader";
+        } else {
+            throw new Exception("Unknown modloader with name of " + modloaderTarget.name);
+        }
+
+        packVersion.mods = modpacksChPackVersionManifest.files.parallelStream()
+                .filter(f -> f.type == ModpacksChPackVersionManifectFileType.MOD).map(file -> file.convertToMod())
+                .collect(Collectors.toList());
+
+        hideSubProgressBar();
+    }
+
+    private void generatePackVersionFromMultiMC() throws Exception {
+        addPercent(5);
+        fireTask(GetText.tr("Generating Pack Version Definition From MultiMC"));
+        fireSubProgressUnknown();
+
+        if (multiMCManifest.formatVersion != 1) {
+            throw new Exception("Format is version " + multiMCManifest.formatVersion + " which I cannot install");
+        }
+
+        String minecraftVersion = multiMCManifest.components.stream()
+                .filter(c -> c.uid.equalsIgnoreCase("net.minecraft")).findFirst().get().version;
+
+        this.packVersion = new Version();
+        packVersion.version = "1";
+        packVersion.minecraft = minecraftVersion;
+        packVersion.enableCurseForgeIntegration = true;
+        packVersion.enableEditingMods = true;
+
+        packVersion.loader = new com.atlauncher.data.json.Loader();
+
+        MultiMCComponent forgeComponent = multiMCManifest.components.stream()
+                .filter(c -> c.uid.equalsIgnoreCase("net.minecraftforge")).findFirst().orElse(null);
+        MultiMCComponent fabricLoaderComponent = multiMCManifest.components.stream()
+                .filter(c -> c.uid.equalsIgnoreCase("net.fabricmc.fabric-loader")).findFirst().orElse(null);
+
+        if (forgeComponent != null) {
+            String forgeVersionString = forgeComponent.version;
+
+            java.lang.reflect.Type type = new TypeToken<APIResponse<ATLauncherApiForgeVersion>>() {
+            }.getType();
+
+            APIResponse<ATLauncherApiForgeVersion> forgeVersionInfo = com.atlauncher.network.Download.build()
+                    .setUrl(String.format("%sforge-version/%s", Constants.API_BASE_URL, forgeVersionString))
+                    .asType(type);
+
+            Map<String, Object> loaderMeta = new HashMap<>();
+            loaderMeta.put("minecraft", minecraftVersion);
+            loaderMeta.put("version", forgeVersionInfo.getData().version);
+            loaderMeta.put("rawVersion", forgeVersionInfo.getData().rawVersion);
+            loaderMeta.put("installerSize", forgeVersionInfo.getData().installerSize);
+            loaderMeta.put("installerSha1", forgeVersionInfo.getData().installerSha1Hash);
+            packVersion.loader.metadata = loaderMeta;
+
+            if (Utils.matchVersion(minecraftVersion, "1.13", false, true)) {
+                packVersion.loader.className = "com.atlauncher.data.minecraft.loaders.forge.Forge113Loader";
+            } else {
+                packVersion.loader.className = "com.atlauncher.data.minecraft.loaders.forge.ForgeLoader";
+            }
+        } else if (fabricLoaderComponent != null) {
+            String fabricVersionString = fabricLoaderComponent.version;
+
+            Map<String, Object> loaderMeta = new HashMap<>();
+            loaderMeta.put("minecraft", minecraftVersion);
+            loaderMeta.put("loader", fabricVersionString);
+            packVersion.loader.metadata = loaderMeta;
+            packVersion.loader.className = "com.atlauncher.data.minecraft.loaders.fabric.FabricLoader";
+        }
 
         hideSubProgressBar();
     }
@@ -326,6 +543,10 @@ public class InstanceInstaller extends SwingWorker<Boolean, Void> implements Net
         VersionManifest versionManifest = com.atlauncher.network.Download.build().cached()
                 .setUrl(String.format("%s/mc/game/version_manifest.json", Constants.LAUNCHER_META_MINECRAFT))
                 .asClass(VersionManifest.class);
+
+        if (versionManifest == null) {
+            throw new Exception("Failed to download Minecraft version manifest");
+        }
 
         VersionManifestVersion minecraftVersion = versionManifest.versions.stream()
                 .filter(version -> version.id.equalsIgnoreCase(this.packVersion.getMinecraft())).findFirst()
@@ -367,8 +588,8 @@ public class InstanceInstaller extends SwingWorker<Boolean, Void> implements Net
     }
 
     private void determineModsToBeInstalled() {
-        this.allMods = sortMods(
-                (this.isServer ? this.packVersion.getServerInstallMods() : this.packVersion.getClientInstallMods()));
+        this.allMods = sortMods((this.isServer ? this.packVersion.getServerInstallMods(this)
+                : this.packVersion.getClientInstallMods(this)));
 
         boolean hasOptional = this.allMods.stream().anyMatch(Mod::isOptional);
 
@@ -412,38 +633,126 @@ public class InstanceInstaller extends SwingWorker<Boolean, Void> implements Net
                     .add(new com.atlauncher.data.DisableableMod(mod.getName(), mod.getVersion(), mod.isOptional(), file,
                             com.atlauncher.data.Type.valueOf(com.atlauncher.data.Type.class, mod.getType().toString()),
                             this.packVersion.getColour(mod.getColour()), mod.getDescription(), false, false, true,
-                            mod.getCurseModId(), mod.getCurseFileId()));
+                            mod.getCurseForgeProjectId(), mod.getCurseForgeFileId(), mod.curseForgeProject,
+                            mod.curseForgeFile));
         }
 
-        if (this.isReinstall && (instanceV2 != null ? instanceV2.hasCustomMods() : instance.hasCustomMods())) {
+        if (this.isReinstall && instance.hasCustomMods()) {
             // user chose to save mods even though Minecraft version changed, so add them to
             // the installed list
-            if (this.saveMods || (instanceV2 != null ? instanceV2.id : instance.getMinecraftVersion())
-                    .equalsIgnoreCase(version.minecraftVersion.version)) {
-                for (com.atlauncher.data.DisableableMod mod : (instanceV2 != null
-                        ? instanceV2.getCustomDisableableMods()
-                        : instance.getCustomDisableableMods())) {
-                    modsInstalled.add(mod);
-                }
+            if (this.saveMods || instance.id.equalsIgnoreCase(version.minecraftVersion.version)) {
+                modsInstalled.addAll(instance.getCustomDisableableMods());
             }
 
             // user choosing to not save mods and Minecraft version changed, so delete
             // custom mods
-            if (!this.saveMods && !(instanceV2 != null ? instanceV2.id : instance.getMinecraftVersion())
-                    .equalsIgnoreCase(version.minecraftVersion.version)) {
-                for (com.atlauncher.data.DisableableMod mod : (instanceV2 != null
-                        ? instanceV2.getCustomDisableableMods()
-                        : instance.getCustomDisableableMods())) {
-                    if (this.instanceV2 != null) {
-                        this.instanceV2.launcher.mods.remove(mod);
-                        Utils.delete((mod.isDisabled() ? mod.getDisabledFile(this.instanceV2)
-                                : mod.getFile(this.instanceV2)));
-                    } else {
-                        instance.removeInstalledMod(mod);
-                    }
+            if (!this.saveMods && !instance.id.equalsIgnoreCase(version.minecraftVersion.version)) {
+                for (com.atlauncher.data.DisableableMod mod : instance.getCustomDisableableMods()) {
+                    this.instance.launcher.mods.remove(mod);
+                    Utils.delete((mod.isDisabled() ? mod.getDisabledFile(this.instance) : mod.getFile(this.instance)));
                 }
             }
         }
+
+        if (this.multiMCManifest != null) {
+            fireTask(GetText.tr("Checking Mods On CurseForge"));
+            fireSubProgressUnknown();
+
+            String minecraftFolder = Files.exists(multiMCExtractedPath.resolve(".minecraft")) ? ".minecraft"
+                    : "minecraft";
+
+            if (Files.exists(multiMCExtractedPath.resolve(minecraftFolder + "/mods"))) {
+                try (Stream<Path> list = Files.list(multiMCExtractedPath.resolve(minecraftFolder + "/mods"))) {
+                    this.modsInstalled.addAll(list.filter(p -> !Files.isDirectory(p))
+                            .filter(p -> p.toString().toLowerCase().endsWith(".jar")
+                                    || p.toString().toLowerCase().endsWith(".zip"))
+                            .map(p -> convertPathToDisableableMod(p, Type.mods)).collect(Collectors.toList()));
+                } catch (IOException e) {
+                    LogManager.logStackTrace(e);
+                }
+            }
+
+            if (Files.exists(multiMCExtractedPath.resolve(minecraftFolder + "/mods/" + packVersion.minecraft))) {
+                try (Stream<Path> list = Files
+                        .list(multiMCExtractedPath.resolve(minecraftFolder + "/mods/" + packVersion.minecraft))) {
+                    this.modsInstalled.addAll(list.filter(p -> !Files.isDirectory(p))
+                            .filter(p -> p.toString().toLowerCase().endsWith(".jar")
+                                    || p.toString().toLowerCase().endsWith(".zip"))
+                            .map(p -> convertPathToDisableableMod(p, Type.dependency)).collect(Collectors.toList()));
+                } catch (IOException e) {
+                    LogManager.logStackTrace(e);
+                }
+            }
+
+            if (Files.exists(multiMCExtractedPath.resolve(minecraftFolder + "/mods/ic2"))) {
+                try (Stream<Path> list = Files.list(multiMCExtractedPath.resolve(minecraftFolder + "/mods/ic2"))) {
+                    this.modsInstalled.addAll(list.filter(p -> !Files.isDirectory(p))
+                            .filter(p -> p.toString().toLowerCase().endsWith(".jar")
+                                    || p.toString().toLowerCase().endsWith(".zip"))
+                            .map(p -> convertPathToDisableableMod(p, Type.ic2lib)).collect(Collectors.toList()));
+                } catch (IOException e) {
+                    LogManager.logStackTrace(e);
+                }
+            }
+        }
+
+        if (this.curseForgeManifest != null) {
+            if (Files.exists(curseForgeExtractedPath
+                    .resolve(Optional.of(curseForgeManifest.overrides).orElse("overrides") + "/mods"))) {
+                try (Stream<Path> list = Files.list(curseForgeExtractedPath
+                        .resolve(Optional.of(curseForgeManifest.overrides).orElse("overrides") + "/mods"))) {
+                    this.modsInstalled.addAll(list.filter(p -> !Files.isDirectory(p))
+                            .filter(p -> p.toString().toLowerCase().endsWith(".jar")
+                                    || p.toString().toLowerCase().endsWith(".zip"))
+                            .map(p -> convertPathToDisableableMod(p, Type.mods)).collect(Collectors.toList()));
+                } catch (IOException e) {
+                    LogManager.logStackTrace(e);
+                }
+            }
+
+            if (Files.exists(
+                    curseForgeExtractedPath.resolve(Optional.of(curseForgeManifest.overrides).orElse("overrides")
+                            + "/mods/" + packVersion.minecraft))) {
+                try (Stream<Path> list = Files.list(
+                        curseForgeExtractedPath.resolve(Optional.of(curseForgeManifest.overrides).orElse("overrides")
+                                + "/mods/" + packVersion.minecraft))) {
+                    this.modsInstalled.addAll(list.filter(p -> !Files.isDirectory(p))
+                            .filter(p -> p.toString().toLowerCase().endsWith(".jar")
+                                    || p.toString().toLowerCase().endsWith(".zip"))
+                            .map(p -> convertPathToDisableableMod(p, Type.dependency)).collect(Collectors.toList()));
+                } catch (IOException e) {
+                    LogManager.logStackTrace(e);
+                }
+            }
+        }
+    }
+
+    private DisableableMod convertPathToDisableableMod(Path p, Type t) {
+        DisableableMod mod = new DisableableMod();
+
+        mod.optional = true;
+        mod.name = p.getFileName().toString();
+        mod.version = "Unknown";
+        mod.description = null;
+
+        MCMod mcMod = Utils.getMCModForFile(p.toFile());
+        if (mcMod != null) {
+            mod.name = Optional.ofNullable(mcMod.name).orElse(p.getFileName().toString());
+            mod.version = Optional.ofNullable(mcMod.version).orElse("Unknown");
+            mod.description = Optional.ofNullable(mcMod.description).orElse(null);
+        } else {
+            FabricMod fabricMod = Utils.getFabricModForFile(p.toFile());
+            if (fabricMod != null) {
+                mod.name = Optional.ofNullable(fabricMod.name).orElse(p.getFileName().toString());
+                mod.version = Optional.ofNullable(fabricMod.version).orElse("Unknown");
+                mod.description = Optional.ofNullable(fabricMod.description).orElse(null);
+            }
+        }
+
+        mod.file = p.getFileName().toString();
+        mod.type = t;
+
+        return mod;
     }
 
     private Boolean install() throws Exception {
@@ -517,6 +826,11 @@ public class InstanceInstaller extends SwingWorker<Boolean, Void> implements Net
             return false;
         }
 
+        checkModsOnCurseForge();
+        if (isCancelled()) {
+            return false;
+        }
+
         // Copy over common configs if any
         if (FileSystem.COMMON.toFile().listFiles().length != 0) {
             Utils.copyDirectory(FileSystem.COMMON.toFile(), this.root.toFile());
@@ -530,14 +844,14 @@ public class InstanceInstaller extends SwingWorker<Boolean, Void> implements Net
     }
 
     private void saveInstanceJson() {
-        InstanceV2 instance = new InstanceV2(this.minecraftVersion);
+        Instance instance = new Instance(this.minecraftVersion);
         instance.ROOT = this.root;
-        InstanceV2Launcher instanceLauncher;
+        InstanceLauncher instanceLauncher;
 
-        if (!this.isReinstall || this.instance != null) {
-            instanceLauncher = new InstanceV2Launcher();
+        if (!this.isReinstall) {
+            instanceLauncher = new InstanceLauncher();
         } else {
-            instanceLauncher = this.instanceV2.launcher;
+            instanceLauncher = this.instance.launcher;
         }
 
         instance.libraries = this.getLibraries();
@@ -548,9 +862,10 @@ public class InstanceInstaller extends SwingWorker<Boolean, Void> implements Net
         instanceLauncher.pack = this.pack.name;
         instanceLauncher.description = this.pack.description;
         instanceLauncher.packId = this.pack.id;
+        instanceLauncher.externaPackId = this.pack.externalId;
         instanceLauncher.version = this.packVersion.version;
         instanceLauncher.java = this.packVersion.java;
-        instanceLauncher.enableCurseIntegration = this.packVersion.enableCurseIntegration;
+        instanceLauncher.enableCurseForgeIntegration = this.packVersion.enableCurseForgeIntegration;
         instanceLauncher.enableEditingMods = this.packVersion.enableEditingMods;
         instanceLauncher.loaderVersion = this.loaderVersion;
         instanceLauncher.isDev = this.version.isDev;
@@ -559,7 +874,15 @@ public class InstanceInstaller extends SwingWorker<Boolean, Void> implements Net
         instanceLauncher.requiredMemory = this.packVersion.memory;
         instanceLauncher.requiredPermGen = this.packVersion.permGen;
         instanceLauncher.assetsMapToResources = this.assetsMapToResources;
-        instanceLauncher.curseManifest = curseManifest;
+        instanceLauncher.curseForgeProject = this.pack.curseForgeProject;
+        instanceLauncher.curseForgeFile = this.version._curseForgeFile;
+        instanceLauncher.multiMCManifest = multiMCManifest;
+        instanceLauncher.modpacksChPackManifest = modpacksChPackManifest;
+        instanceLauncher.modpacksChPackVersionManifest = modpacksChPackVersionManifest;
+
+        if (instanceLauncher.curseForgeManifest != null) {
+            instanceLauncher.curseForgeManifest = null;
+        }
 
         if (this.version.isDev) {
             instanceLauncher.hash = this.version.hash;
@@ -569,15 +892,11 @@ public class InstanceInstaller extends SwingWorker<Boolean, Void> implements Net
 
         instance.save();
 
-        if (this.instanceV2 != null) {
-            InstanceManager.getInstances().remove(this.instanceV2);
+        if (this.instance != null) {
+            InstanceManager.getInstances().remove(this.instance);
         }
 
         InstanceManager.getInstances().add(instance);
-
-        if (this.instance != null) {
-            InstanceManager.getOldInstances().remove(this.instance);
-        }
 
         App.launcher.reloadInstancesPanel();
     }
@@ -610,13 +929,13 @@ public class InstanceInstaller extends SwingWorker<Boolean, Void> implements Net
             } else if (this.packVersion.mainClass.depends != null) {
                 String depends = this.packVersion.mainClass.depends;
 
-                if (this.selectedMods.stream().filter(mod -> mod.name.equalsIgnoreCase(depends)).count() != 0) {
+                if (this.selectedMods.stream().anyMatch(mod -> mod.name.equalsIgnoreCase(depends))) {
                     this.mainClass = this.packVersion.mainClass.mainClass;
                 }
             } else if (this.packVersion.getMainClass().hasDependsGroup()) {
                 String dependsGroup = this.packVersion.mainClass.dependsGroup;
 
-                if (this.selectedMods.stream().filter(mod -> mod.group.equalsIgnoreCase(dependsGroup)).count() != 0) {
+                if (this.selectedMods.stream().anyMatch(mod -> mod.group.equalsIgnoreCase(dependsGroup))) {
                     this.mainClass = this.packVersion.mainClass.mainClass;
                 }
             }
@@ -665,19 +984,19 @@ public class InstanceInstaller extends SwingWorker<Boolean, Void> implements Net
             } else if (this.packVersion.extraArguments.depends == null) {
                 String depends = this.packVersion.extraArguments.depends;
 
-                if (this.selectedMods.stream().filter(mod -> mod.name.equalsIgnoreCase(depends)).count() != 0) {
+                if (this.selectedMods.stream().anyMatch(mod -> mod.name.equalsIgnoreCase(depends))) {
                     add = true;
                 }
             } else if (this.packVersion.extraArguments.dependsGroup == null) {
                 String dependsGroup = this.packVersion.extraArguments.dependsGroup;
 
-                if (this.selectedMods.stream().filter(mod -> mod.group.equalsIgnoreCase(dependsGroup)).count() != 0) {
+                if (this.selectedMods.stream().anyMatch(mod -> mod.group.equalsIgnoreCase(dependsGroup))) {
                     add = true;
                 }
             }
 
             if (add) {
-                this.arguments.game.addAll(Arrays.asList(this.packVersion.extraArguments.arguments.split(" ")).stream()
+                this.arguments.game.addAll(Arrays.stream(this.packVersion.extraArguments.arguments.split(" "))
                         .map(ArgumentRule::new).collect(Collectors.toList()));
             }
         }
@@ -686,7 +1005,7 @@ public class InstanceInstaller extends SwingWorker<Boolean, Void> implements Net
     private void addMinecraftArguments() {
         // older MC versions
         if (this.minecraftVersion.minecraftArguments != null) {
-            this.arguments.game.addAll(Arrays.asList(this.minecraftVersion.minecraftArguments.split(" ")).stream()
+            this.arguments.game.addAll(Arrays.stream(this.minecraftVersion.minecraftArguments.split(" "))
                     .map(arg -> new ArgumentRule(null, arg)).collect(Collectors.toList()));
         }
 
@@ -726,38 +1045,39 @@ public class InstanceInstaller extends SwingWorker<Boolean, Void> implements Net
         OkHttpClient httpClient = Network.createProgressClient(this);
         DownloadPool pool = new DownloadPool();
 
-        index.objects.entrySet().stream().forEach(entry -> {
-            AssetObject object = entry.getValue();
+        index.objects.forEach((key, object) -> {
             String filename = object.hash.substring(0, 2) + "/" + object.hash;
             String url = String.format("%s/%s", Constants.MINECRAFT_RESOURCES, filename);
 
             com.atlauncher.network.Download download = new com.atlauncher.network.Download().setUrl(url)
                     .downloadTo(FileSystem.RESOURCES_OBJECTS.resolve(filename)).hash(object.hash).size(object.size)
-                    .withInstanceInstaller(this).withHttpClient(httpClient).withFriendlyFileName(entry.getKey());
+                    .withInstanceInstaller(this).withHttpClient(httpClient).withFriendlyFileName(key);
 
             pool.add(download);
         });
 
         DownloadPool smallPool = pool.downsize();
 
-        this.setTotalBytes(smallPool.totalSize());
-        this.fireSubProgress(0);
-
-        smallPool.downloadAll();
+        if (smallPool.size() != 0) {
+            this.setTotalBytes(smallPool.totalSize());
+            this.fireSubProgress(0);
+            smallPool.downloadAll();
+        }
 
         // copy resources to instance
         if (index.mapToResources || assetIndex.id.equalsIgnoreCase("legacy")) {
-            index.objects.entrySet().stream().forEach(entry -> {
-                AssetObject object = entry.getValue();
+            fireTask(GetText.tr("Copying Resources"));
+            fireSubProgressUnknown();
+
+            index.objects.forEach((key, object) -> {
                 String filename = object.hash.substring(0, 2) + "/" + object.hash;
 
                 Path downloadedFile = FileSystem.RESOURCES_OBJECTS.resolve(filename);
 
                 if (index.mapToResources) {
-                    FileUtils.copyFile(downloadedFile, this.root.resolve("resources/" + entry.getKey()), true);
+                    FileUtils.copyFile(downloadedFile, this.root.resolve("resources/" + key), true);
                 } else if (assetIndex.id.equalsIgnoreCase("legacy")) {
-                    FileUtils.copyFile(downloadedFile, FileSystem.RESOURCES_VIRTUAL_LEGACY.resolve(entry.getKey()),
-                            true);
+                    FileUtils.copyFile(downloadedFile, FileSystem.RESOURCES_VIRTUAL_LEGACY.resolve(key), true);
                 }
             });
         }
@@ -883,12 +1203,11 @@ public class InstanceInstaller extends SwingWorker<Boolean, Void> implements Net
             }
 
             if (library.depends != null) {
-                if (this.selectedMods.stream().filter(mod -> mod.name.equalsIgnoreCase(library.depends)).count() == 0) {
+                if (this.selectedMods.stream().noneMatch(mod -> mod.name.equalsIgnoreCase(library.depends))) {
                     continue;
                 }
             } else if (library.hasDependsGroup()) {
-                if (this.selectedMods.stream().filter(mod -> mod.group.equalsIgnoreCase(library.dependsGroup))
-                        .count() == 0) {
+                if (this.selectedMods.stream().noneMatch(mod -> mod.group.equalsIgnoreCase(library.dependsGroup))) {
                     continue;
                 }
             }
@@ -1035,7 +1354,7 @@ public class InstanceInstaller extends SwingWorker<Boolean, Void> implements Net
     private void downloadMods() {
         addPercent(25);
 
-        if (selectedMods.size() == 0) {
+        if (multiMCManifest != null || selectedMods.size() == 0) {
             return;
         }
 
@@ -1047,11 +1366,22 @@ public class InstanceInstaller extends SwingWorker<Boolean, Void> implements Net
 
         this.selectedMods.stream().filter(mod -> mod.download != DownloadType.browser).forEach(mod -> {
             com.atlauncher.network.Download download = new com.atlauncher.network.Download()
-                    .setUrl(mod.getDownloadUrl()).downloadTo(FileSystem.DOWNLOADS.resolve(mod.getFile())).hash(mod.md5)
+                    .setUrl(mod.getDownloadUrl()).downloadTo(FileSystem.DOWNLOADS.resolve(mod.getFile()))
                     .size(mod.filesize).withInstanceInstaller(this).withHttpClient(httpClient);
 
             if (mod.fingerprint != null) {
                 download = download.fingerprint(mod.fingerprint);
+            }
+
+            if (mod.sha1 != null) {
+                download = download.hash(mod.sha1);
+            } else if (mod.md5 != null) {
+                download = download.hash(mod.md5);
+            }
+
+            // modpacks.ch api just flat out returns wrong hases/sizes so ignore
+            if (modpacksChPackVersionManifest != null) {
+                download = download.ignoreFailures();
             }
 
             pool.add(download);
@@ -1075,7 +1405,7 @@ public class InstanceInstaller extends SwingWorker<Boolean, Void> implements Net
     private void installMods() {
         addPercent(25);
 
-        if (this.selectedMods.size() == 0) {
+        if (multiMCManifest != null || this.selectedMods.size() == 0) {
             return;
         }
 
@@ -1163,7 +1493,63 @@ public class InstanceInstaller extends SwingWorker<Boolean, Void> implements Net
             return;
         }
 
-        if (curseManifest == null) {
+        if (curseForgeManifest != null) {
+            fireSubProgressUnknown();
+            fireTask(GetText.tr("Copying Overrides"));
+            Utils.copyDirectory(this.curseForgeExtractedPath
+                    .resolve(Optional.of(curseForgeManifest.overrides).orElse("overrides")).toFile(),
+                    this.root.toFile(), false);
+        } else if (modpacksChPackManifest != null) {
+            fireSubProgressUnknown();
+            fireTask(GetText.tr("Calculating Files To Download"));
+
+            List<com.atlauncher.network.Download> filesToDownload = modpacksChPackVersionManifest.files
+                    .parallelStream().filter(
+                            f -> f.type != ModpacksChPackVersionManifectFileType.MOD)
+                    .map(file -> com.atlauncher.network.Download.build().setUrl(file.url).size((long) file.size)
+                            .hash(file.sha1).ignoreFailures()
+                            .downloadTo(root
+                                    .resolve((file.path.substring(0, 2).equalsIgnoreCase("./") ? file.path.substring(2)
+                                            : file.path) + file.name))
+                            .withInstanceInstaller(this).withHttpClient(Network.createProgressClient(this)))
+                    .collect(Collectors.toList());
+
+            fireTask(GetText.tr("Creating Config Directories"));
+
+            modpacksChPackVersionManifest.files.stream()
+                    .filter(f -> f.type != ModpacksChPackVersionManifectFileType.MOD)
+                    .map(file -> root.resolve(
+                            file.path.substring(0, 2).equalsIgnoreCase("./") ? file.path.substring(2) : file.path))
+                    .forEach(path -> {
+                        if (!Files.exists(path)) {
+                            try {
+                                Files.createDirectories(path);
+                            } catch (IOException e) {
+                                LogManager.logStackTrace(e);
+                            }
+                        }
+                    });
+
+            fireTask(GetText.tr("Downloading Configs"));
+
+            DownloadPool pool = new DownloadPool();
+            pool.addAll(filesToDownload);
+
+            DownloadPool smallPool = pool.downsize();
+
+            this.setTotalBytes(smallPool.totalSize());
+            this.fireSubProgress(0);
+
+            smallPool.downloadAll();
+        } else if (multiMCManifest != null) {
+            fireSubProgressUnknown();
+            String minecraftFolder = Files.exists(multiMCExtractedPath.resolve(".minecraft")) ? ".minecraft"
+                    : "minecraft";
+
+            fireTask(GetText.tr("Copying " + minecraftFolder + " folder"));
+            Utils.copyDirectory(this.multiMCExtractedPath.resolve(minecraftFolder + "/").toFile(), this.root.toFile(),
+                    false);
+        } else {
             fireTask(GetText.tr("Downloading Configs"));
 
             File configs = this.temp.resolve("Configs.zip").toFile();
@@ -1191,35 +1577,94 @@ public class InstanceInstaller extends SwingWorker<Boolean, Void> implements Net
 
             ZipUtil.unpack(configs, this.root.toFile());
             Utils.delete(configs);
-        } else {
-            fireSubProgressUnknown();
-            fireTask(GetText.tr("Copying Overrides"));
-            ZipUtil.unpack(manifestFile, this.temp.resolve("manifest").toFile());
-            Utils.copyDirectory(
-                    this.temp.resolve("manifest/" + Optional.of(curseManifest.overrides).orElse("overrides")).toFile(),
-                    this.root.toFile(), false);
         }
     }
 
     private void downloadInstanceImage() throws Exception {
         addPercent(5);
 
-        if (curseManifest == null || this.pack.cursePack == null) {
-            return;
+        if (this.pack.curseForgeProject != null) {
+            fireTask(GetText.tr("Downloading Instance Image"));
+            CurseForgeAttachment attachment = this.pack.curseForgeProject.attachments.stream().filter(a -> a.isDefault)
+                    .findFirst().orElse(null);
+
+            if (attachment != null) {
+                com.atlauncher.network.Download imageDownload = com.atlauncher.network.Download.build()
+                        .setUrl(attachment.url).downloadTo(root.resolve("instance.png")).withInstanceInstaller(this)
+                        .withHttpClient(Network.createProgressClient(this));
+
+                this.setTotalBytes(imageDownload.getFilesize());
+                imageDownload.downloadFile();
+            }
+        } else if (modpacksChPackManifest != null) {
+            fireTask(GetText.tr("Downloading Instance Image"));
+            ModpacksChPackArt art = this.modpacksChPackManifest.art.stream()
+                    .filter(a -> a.type == ModpacksChPackArtType.SQUARE).findFirst().orElse(null);
+
+            if (art != null) {
+                // we can't check the provided hash and size here otherwise download fails as
+                // their api doesn't return the correct info
+                com.atlauncher.network.Download imageDownload = com.atlauncher.network.Download.build().setUrl(art.url)
+                        .size(art.size).hash(art.sha1).downloadTo(root.resolve("instance.png")).ignoreFailures()
+                        .withInstanceInstaller(this).withHttpClient(Network.createProgressClient(this));
+
+                this.setTotalBytes(art.size);
+                imageDownload.downloadFile();
+            }
         }
+    }
 
-        fireTask(GetText.tr("Downloading Instance Image"));
+    private void checkModsOnCurseForge() {
+        fireTask(GetText.tr("Checking Mods On CurseForge"));
+        fireSubProgressUnknown();
 
-        CurseAttachment attachment = this.pack.cursePack.attachments.stream().filter(a -> a.isDefault).findFirst()
-                .orElse(null);
+        Map<Long, DisableableMod> murmurHashes = new HashMap<>();
 
-        if (attachment != null) {
-            com.atlauncher.network.Download imageDownload = com.atlauncher.network.Download.build()
-                    .setUrl(attachment.url).downloadTo(root.resolve("instance.png")).withInstanceInstaller(this)
-                    .withHttpClient(Network.createProgressClient(this));
+        this.modsInstalled.stream().filter(dm -> dm.curseForgeProject == null && dm.curseForgeFile == null)
+                .filter(dm -> dm.getFile(root, this.packVersion.minecraft) != null).forEach(dm -> {
+                    try {
+                        long hash = Hashing.murmur(dm.getFile(root, this.packVersion.minecraft).toPath());
+                        murmurHashes.put(hash, dm);
+                    } catch (Throwable t) {
+                        LogManager.logStackTrace(t);
+                    }
+                });
 
-            this.setTotalBytes(imageDownload.getFilesize());
-            imageDownload.downloadFile();
+        if (murmurHashes.size() != 0) {
+            CurseForgeFingerprint fingerprintResponse = CurseForgeApi
+                    .checkFingerprints(murmurHashes.keySet().stream().toArray(Long[]::new));
+
+            if (fingerprintResponse != null && fingerprintResponse.exactMatches != null) {
+                int[] projectIdsFound = fingerprintResponse.exactMatches.stream().mapToInt(em -> em.id).toArray();
+
+                if (projectIdsFound.length != 0) {
+                    Map<Integer, CurseForgeProject> foundProjects = CurseForgeApi.getProjectsAsMap(projectIdsFound);
+
+                    if (foundProjects != null) {
+                        fingerprintResponse.exactMatches.stream()
+                                .filter(em -> murmurHashes.containsKey(em.file.packageFingerprint))
+                                .forEach(foundMod -> {
+                                    DisableableMod dm = murmurHashes.get(foundMod.file.packageFingerprint);
+
+                                    // add CurseForge information
+                                    dm.curseForgeProjectId = foundMod.id;
+                                    dm.curseForgeFile = foundMod.file;
+                                    dm.curseForgeFileId = foundMod.file.id;
+
+                                    CurseForgeProject curseForgeProject = foundProjects.get(foundMod.id);
+
+                                    if (curseForgeProject != null) {
+                                        dm.curseForgeProject = curseForgeProject;
+                                        dm.name = curseForgeProject.name;
+                                        dm.description = curseForgeProject.summary;
+                                    }
+
+                                    LogManager.debug("Found matching mod from CurseForge called "
+                                            + dm.curseForgeFile.displayName);
+                                });
+                    }
+                }
+            }
         }
     }
 
@@ -1344,28 +1789,20 @@ public class InstanceInstaller extends SwingWorker<Boolean, Void> implements Net
             if (isReinstall) {
                 if (Files.isDirectory(this.root.resolve("mods"))) {
                     Utils.deleteWithFilter(this.root.resolve("mods").toFile(),
-                            (instanceV2 != null ? instanceV2.getPackMods(com.atlauncher.data.Type.mods)
-                                    : instance.getPackMods(com.atlauncher.data.Type.mods)),
-                            true);
+                            instance.getPackMods(com.atlauncher.data.Type.mods), true);
                 }
 
                 if (Files.isDirectory(this.root.resolve("coremods"))) {
                     Utils.deleteWithFilter(this.root.resolve("coremods").toFile(),
-                            (instanceV2 != null ? instanceV2.getPackMods(com.atlauncher.data.Type.coremods)
-                                    : instance.getPackMods(com.atlauncher.data.Type.coremods)),
-                            true);
+                            instance.getPackMods(com.atlauncher.data.Type.coremods), true);
                 }
 
                 if (Files.isDirectory(this.root.resolve("jarmods"))) {
                     Utils.deleteWithFilter(this.root.resolve("jarmods").toFile(),
-                            (instanceV2 != null ? instanceV2.getPackMods(com.atlauncher.data.Type.jar)
-                                    : instance.getPackMods(com.atlauncher.data.Type.jar)),
-                            true);
+                            instance.getPackMods(com.atlauncher.data.Type.jar), true);
 
                     Utils.deleteWithFilter(this.root.resolve("jarmods").toFile(),
-                            (instanceV2 != null ? instanceV2.getPackMods(com.atlauncher.data.Type.forge)
-                                    : instance.getPackMods(com.atlauncher.data.Type.forge)),
-                            true);
+                            instance.getPackMods(com.atlauncher.data.Type.forge), true);
                 }
             } else {
                 FileUtils.deleteDirectory(this.root.resolve("mods"));
@@ -1415,6 +1852,39 @@ public class InstanceInstaller extends SwingWorker<Boolean, Void> implements Net
                         }
                     }
                 }
+            }
+
+            // delete all files downloaded previously if modpacks.ch pack
+            if (isReinstall && instance != null && instance.isModpacksChPack()) {
+                instance.launcher.modpacksChPackVersionManifest.files.stream()
+                        .filter(f -> f.type != ModpacksChPackVersionManifectFileType.MOD)
+                        .map(file -> instance.ROOT.resolve(
+                                (file.path.substring(0, 2).equalsIgnoreCase("./") ? file.path.substring(2) : file.path)
+                                        + file.name))
+                        .forEach(path -> {
+                            if (Files.exists(path) && !Files.isDirectory(path)) {
+                                try {
+                                    Files.delete(path);
+                                } catch (IOException e) {
+                                    LogManager.logStackTrace(e);
+                                }
+                            }
+                        });
+
+                // now delete all the empty directories left over to cleanup
+                instance.launcher.modpacksChPackVersionManifest.files.stream()
+                        .filter(f -> f.type != ModpacksChPackVersionManifectFileType.MOD)
+                        .map(file -> instance.ROOT.resolve(
+                                file.path.substring(0, 2).equalsIgnoreCase("./") ? file.path.substring(2) : file.path))
+                        .distinct().sorted(Comparator.comparingInt(Path::getNameCount).reversed()).forEach(path -> {
+                            try {
+                                if (Files.exists(path) && FileUtils.directoryIsEmpty(path)) {
+                                    Files.delete(path);
+                                }
+                            } catch (IOException e) {
+                                LogManager.logStackTrace(e);
+                            }
+                        });
             }
         }
 
@@ -1513,12 +1983,24 @@ public class InstanceInstaller extends SwingWorker<Boolean, Void> implements Net
         File batFile = new File(this.root.toFile(), "LaunchServer.bat");
         File shFile = new File(this.root.toFile(), "LaunchServer.sh");
         File commandFile = new File(this.root.toFile(), "LaunchServer.command");
-        Utils.replaceText(App.class.getResourceAsStream("/server-scripts/LaunchServer.bat"), batFile, "%%SERVERJAR%%",
-                getServerJar());
-        Utils.replaceText(App.class.getResourceAsStream("/server-scripts/LaunchServer.sh"), shFile, "%%SERVERJAR%%",
-                getServerJar());
-        Utils.replaceText(App.class.getResourceAsStream("/server-scripts/LaunchServer.command"), commandFile,
+        File tmpBatFile = new File(this.temp.toFile(), "LaunchServer.bat");
+        File tmpShFile = new File(this.temp.toFile(), "LaunchServer.sh");
+        File tmpCommandFile = new File(this.temp.toFile(), "LaunchServer.command");
+
+        // write out the server jar filename
+        Utils.replaceText(App.class.getResourceAsStream("/server-scripts/LaunchServer.bat"), tmpBatFile,
                 "%%SERVERJAR%%", getServerJar());
+        Utils.replaceText(App.class.getResourceAsStream("/server-scripts/LaunchServer.sh"), tmpShFile, "%%SERVERJAR%%",
+                getServerJar());
+        Utils.replaceText(App.class.getResourceAsStream("/server-scripts/LaunchServer.command"), tmpCommandFile,
+                "%%SERVERJAR%%", getServerJar());
+
+        // replace/remove the server arguments (if any)
+        Utils.replaceText(new FileInputStream(tmpBatFile), batFile, "%%ARGUMENTS%%", this.packVersion.serverArguments);
+        Utils.replaceText(new FileInputStream(tmpShFile), shFile, "%%ARGUMENTS%%", this.packVersion.serverArguments);
+        Utils.replaceText(new FileInputStream(tmpCommandFile), commandFile, "%%ARGUMENTS%%",
+                this.packVersion.serverArguments);
+
         batFile.setExecutable(true);
         shFile.setExecutable(true);
         commandFile.setExecutable(true);
@@ -1646,12 +2128,11 @@ public class InstanceInstaller extends SwingWorker<Boolean, Void> implements Net
     }
 
     public boolean wasModInstalled(String mod) {
-        return instance != null
-                && (instanceV2 != null ? instanceV2.wasModInstalled(mod) : instance.wasModInstalled(mod));
+        return instance.wasModInstalled(mod);
     }
 
     public boolean wasModSelected(String mod) {
-        return instance != null && (instanceV2 != null ? instanceV2.wasModSelected(mod) : instance.wasModSelected(mod));
+        return instance.wasModSelected(mod);
     }
 
     public String getShareCodeData(String code) {
@@ -1743,6 +2224,12 @@ public class InstanceInstaller extends SwingWorker<Boolean, Void> implements Net
     @Override
     public void addDownloadedBytes(long bytes) {
         this.downloadedBytes += bytes;
+        this.updateProgressBar();
+    }
+
+    @Override
+    public void addBytesToDownload(long bytes) {
+        this.totalBytes += bytes;
         this.updateProgressBar();
     }
 

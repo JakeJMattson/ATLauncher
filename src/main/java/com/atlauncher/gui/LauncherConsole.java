@@ -1,6 +1,6 @@
 /*
  * ATLauncher - https://github.com/ATLauncher/ATLauncher
- * Copyright (C) 2013-2020 ATLauncher
+ * Copyright (C) 2013-2021 ATLauncher
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -18,10 +18,13 @@
 package com.atlauncher.gui;
 
 import java.awt.BorderLayout;
+import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.Toolkit;
 import java.awt.datatransfer.Clipboard;
 import java.awt.datatransfer.StringSelection;
+import java.awt.event.ComponentAdapter;
+import java.awt.event.ComponentEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 
@@ -30,7 +33,8 @@ import javax.swing.JMenuItem;
 import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
 
-import com.atlauncher.data.Constants;
+import com.atlauncher.App;
+import com.atlauncher.constants.Constants;
 import com.atlauncher.evnt.listener.RelocalizationListener;
 import com.atlauncher.evnt.manager.ConsoleCloseManager;
 import com.atlauncher.evnt.manager.ConsoleOpenManager;
@@ -46,18 +50,28 @@ public class LauncherConsole extends JFrame implements RelocalizationListener {
 
     private static final long serialVersionUID = -3538990021922025818L;
     public Console console;
-    private JScrollPane scrollPane;
-    private ConsoleBottomBar bottomBar;
+    private final ConsoleBottomBar bottomBar;
     private JPopupMenu contextMenu; // Right click menu
 
     private JMenuItem copy;
 
     public LauncherConsole() {
-        this.setTitle(Constants.LAUNCHER_NAME + " Console " + Constants.VERSION);
-        this.setDefaultCloseOperation(JFrame.HIDE_ON_CLOSE);
-        this.setIconImage(Utils.getImage("/assets/image/Icon.png"));
-        this.setMinimumSize(new Dimension(650, 400));
-        this.setLayout(new BorderLayout());
+        setTitle(Constants.LAUNCHER_NAME + " Console");
+        setDefaultCloseOperation(JFrame.HIDE_ON_CLOSE);
+        setIconImage(Utils.getImage("/assets/image/Icon.png"));
+        setLayout(new BorderLayout());
+
+        setMinimumSize(new Dimension(650, 400));
+
+        try {
+            if (App.settings.rememberWindowSizePosition && App.settings.consoleSize != null
+                    && App.settings.consolePosition != null) {
+                setBounds(App.settings.consolePosition.x, App.settings.consolePosition.y,
+                        App.settings.consoleSize.width, App.settings.consoleSize.height);
+            }
+        } catch (Exception e) {
+            LogManager.logStackTrace("Error setting custom remembered window size settings", e);
+        }
 
         console = new Console();
 
@@ -65,11 +79,31 @@ public class LauncherConsole extends JFrame implements RelocalizationListener {
 
         bottomBar = new ConsoleBottomBar();
 
-        scrollPane = new JScrollPane(console, JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED,
+        JScrollPane scrollPane = new JScrollPane(console, JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED,
                 JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
         add(scrollPane, BorderLayout.CENTER);
         add(bottomBar, BorderLayout.SOUTH);
         RelocalizationManager.addListener(this);
+
+        addComponentListener(new ComponentAdapter() {
+            public void componentResized(ComponentEvent evt) {
+                Component c = (Component) evt.getSource();
+
+                if (App.settings.rememberWindowSizePosition) {
+                    App.settings.consoleSize = c.getSize();
+                    App.settings.save();
+                }
+            }
+
+            public void componentMoved(ComponentEvent evt) {
+                Component c = (Component) evt.getSource();
+
+                if (App.settings.rememberWindowSizePosition) {
+                    App.settings.consolePosition = c.getLocation();
+                    App.settings.save();
+                }
+            }
+        });
     }
 
     @Override

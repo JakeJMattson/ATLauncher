@@ -1,6 +1,6 @@
 /*
  * ATLauncher - https://github.com/ATLauncher/ATLauncher
- * Copyright (C) 2013-2020 ATLauncher
+ * Copyright (C) 2013-2021 ATLauncher
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -17,6 +17,7 @@
  */
 package com.atlauncher.network;
 
+import java.nio.file.Files;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
@@ -25,6 +26,7 @@ import java.util.stream.Collectors;
 
 import com.atlauncher.App;
 import com.atlauncher.managers.LogManager;
+import com.atlauncher.utils.FileUtils;
 
 @SuppressWarnings("serial")
 public final class DownloadPool extends LinkedList<Download> {
@@ -39,6 +41,12 @@ public final class DownloadPool extends LinkedList<Download> {
     }
 
     public void downloadAll() {
+        for (Download dl : this) {
+            if (!Files.isDirectory(dl.to.getParent())) {
+                FileUtils.createDirectory(dl.to.getParent());
+            }
+        }
+
         ExecutorService executor = Executors.newFixedThreadPool(App.settings.concurrentConnections);
         synchronized (this) {
             for (Download dl : this) {
@@ -100,7 +108,7 @@ public final class DownloadPool extends LinkedList<Download> {
         return false;
     }
 
-    private final class Downloader implements Runnable {
+    private static final class Downloader implements Runnable {
         private final Download dl;
 
         private Downloader(Download dl) {

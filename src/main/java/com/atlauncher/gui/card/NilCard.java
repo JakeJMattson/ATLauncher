@@ -1,6 +1,6 @@
 /*
  * ATLauncher - https://github.com/ATLauncher/ATLauncher
- * Copyright (C) 2013-2020 ATLauncher
+ * Copyright (C) 2013-2021 ATLauncher
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -27,7 +27,6 @@ import javax.swing.JTextArea;
 import javax.swing.border.TitledBorder;
 
 import com.atlauncher.App;
-import com.atlauncher.FileSystem;
 import com.atlauncher.evnt.listener.RelocalizationListener;
 import com.atlauncher.evnt.manager.RelocalizationManager;
 import com.atlauncher.gui.components.ImagePanel;
@@ -40,11 +39,10 @@ import org.mini2Dx.gettext.GetText;
  */
 @SuppressWarnings("serial")
 public class NilCard extends JPanel implements RelocalizationListener {
-    private static final Image defaultImage = Utils.getIconImage(FileSystem.IMAGES.resolve("defaultimage.png").toFile())
+    private static final Image defaultImage = Utils.getIconImage("/assets/image/DefaultPackImage.png")
             .getImage();
 
     private final JTextArea error = new JTextArea();
-    private final JSplitPane splitter = new JSplitPane();
 
     public NilCard(String message) {
         super(new BorderLayout());
@@ -60,12 +58,13 @@ public class NilCard extends JPanel implements RelocalizationListener {
         this.error.setWrapStyleWord(true);
         this.error.setText(message);
 
-        this.splitter.setEnabled(false);
-        this.splitter.setLeftComponent(new ImagePanel(defaultImage));
-        this.splitter.setRightComponent(this.error);
-        this.splitter.setBorder(BorderFactory.createEmptyBorder());
+        JSplitPane splitter = new JSplitPane();
+        splitter.setEnabled(false);
+        splitter.setLeftComponent(new ImagePanel(defaultImage));
+        splitter.setRightComponent(this.error);
+        splitter.setBorder(BorderFactory.createEmptyBorder());
 
-        this.add(this.splitter, BorderLayout.CENTER);
+        this.add(splitter, BorderLayout.CENTER);
     }
 
     public void setMessage(String message) {

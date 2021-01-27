@@ -1,6 +1,6 @@
 /*
  * ATLauncher - https://github.com/ATLauncher/ATLauncher
- * Copyright (C) 2013-2020 ATLauncher
+ * Copyright (C) 2013-2021 ATLauncher
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -28,8 +28,10 @@ import javax.swing.ImageIcon;
 
 import com.atlauncher.FileSystem;
 import com.atlauncher.Gsons;
-import com.atlauncher.data.curse.CurseMod;
+import com.atlauncher.constants.Constants;
+import com.atlauncher.data.curseforge.CurseForgeProject;
 import com.atlauncher.data.json.Version;
+import com.atlauncher.data.modpacksch.ModpacksChPackManifest;
 import com.atlauncher.managers.AccountManager;
 import com.atlauncher.managers.LogManager;
 import com.atlauncher.managers.PackManager;
@@ -37,6 +39,7 @@ import com.atlauncher.utils.Utils;
 
 public class Pack {
     public int id;
+    public int externalId;
     public int position;
     public String name;
     public PackType type;
@@ -49,7 +52,8 @@ public class Pack {
     public boolean system;
     public boolean hasDiscordImage;
     public String description;
-    public CurseMod cursePack;
+    public CurseForgeProject curseForgeProject;
+    public ModpacksChPackManifest modpacksChPack;
     public String discordInviteURL = null;
     public String supportURL = null;
     public String websiteURL = null;
@@ -83,7 +87,7 @@ public class Pack {
     public ImageIcon getImage() {
         File imageFile = FileSystem.IMAGES.resolve(getSafeName().toLowerCase() + ".png").toFile();
         if (!imageFile.exists()) {
-            imageFile = FileSystem.IMAGES.resolve("defaultimage.png").toFile();
+            return Utils.getIconImage("/assets/image/DefaultPackImage.png");
         }
         return Utils.getIconImage(imageFile);
     }
@@ -160,12 +164,12 @@ public class Pack {
     }
 
     public boolean isTester() {
-        Account account = AccountManager.getSelectedAccount();
+        AbstractAccount account = AccountManager.getSelectedAccount();
         if (account == null) {
             return false;
         }
         for (String tester : this.testers) {
-            if (tester.equalsIgnoreCase(account.getMinecraftUsername())) {
+            if (tester.equalsIgnoreCase(account.minecraftUsername)) {
                 return true;
             }
         }
@@ -201,12 +205,12 @@ public class Pack {
         if (this.type != PackType.PRIVATE) {
             return true;
         }
-        Account account = AccountManager.getSelectedAccount();
+        AbstractAccount account = AccountManager.getSelectedAccount();
         if (account == null) {
             return false;
         }
         for (String player : this.allowedPlayers) {
-            if (player.equalsIgnoreCase(account.getMinecraftUsername())) {
+            if (player.equalsIgnoreCase(account.minecraftUsername)) {
                 return true;
             }
         }

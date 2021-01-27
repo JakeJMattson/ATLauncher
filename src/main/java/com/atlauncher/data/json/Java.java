@@ -1,6 +1,6 @@
 /*
  * ATLauncher - https://github.com/ATLauncher/ATLauncher
- * Copyright (C) 2013-2020 ATLauncher
+ * Copyright (C) 2013-2021 ATLauncher
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -21,8 +21,8 @@ import com.atlauncher.annot.Json;
 
 @Json
 public class Java {
-    private int min = 0;
-    private int max = 0;
+    private final int min = 0;
+    private final int max = 0;
 
     public int getMin() {
         return this.min;

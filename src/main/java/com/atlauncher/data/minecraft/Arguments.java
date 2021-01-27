@@ -1,6 +1,6 @@
 /*
  * ATLauncher - https://github.com/ATLauncher/ATLauncher
- * Copyright (C) 2013-2020 ATLauncher
+ * Copyright (C) 2013-2021 ATLauncher
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -49,21 +49,21 @@ public class Arguments {
     }
 
     public String asString() {
-        String arguments = "";
+        StringBuilder arguments = new StringBuilder();
 
         for (ArgumentRule rule : this.jvm) {
             if (rule.applies()) {
-                arguments += " " + rule.getValueAsString();
+                arguments.append(" ").append(rule.getValueAsString());
             }
         }
 
         for (ArgumentRule rule : this.game) {
             if (rule.applies()) {
-                arguments += " " + rule.getValueAsString();
+                arguments.append(" ").append(rule.getValueAsString());
             }
         }
 
-        return arguments;
+        return arguments.toString();
     }
 
     public List<String> asStringList() {

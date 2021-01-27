@@ -1,6 +1,6 @@
 /*
  * ATLauncher - https://github.com/ATLauncher/ATLauncher
- * Copyright (C) 2013-2020 ATLauncher
+ * Copyright (C) 2013-2021 ATLauncher
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -28,9 +28,12 @@ import javax.swing.JToolTip;
 import com.atlauncher.builders.HTMLBuilder;
 import com.atlauncher.data.DisableableMod;
 import com.atlauncher.data.json.Mod;
+import com.atlauncher.data.modrinth.ModrinthDonationUrl;
+import com.atlauncher.data.modrinth.ModrinthMod;
 import com.atlauncher.gui.HoverLineBorder;
 import com.atlauncher.gui.dialogs.EditModsDialog;
 import com.atlauncher.gui.dialogs.ModsChooser;
+import com.atlauncher.managers.DialogManager;
 import com.atlauncher.utils.OS;
 import com.atlauncher.utils.Utils;
 
@@ -49,9 +52,9 @@ public class ModsJCheckBox extends JCheckBox {
      * The mod this object will use to display it's data. Will be type {@link Mod},
      * {@link com.atlauncher.data.json.Mod} or {@link DisableableMod}.
      */
-    private Object mod;
+    private final Object mod;
 
-    private EditModsDialog dialog;
+    private final EditModsDialog dialog;
 
     /**
      * Constructor for use in the {@link ModsChooser} dialog with new JSON format.
@@ -126,31 +129,73 @@ public class ModsJCheckBox extends JCheckBox {
     private void setupContextMenu() {
         JPopupMenu contextMenu = new JPopupMenu();
 
-        if (getDisableableMod().hasFullCurseInformation()) {
-            JMenuItem openOnCurse = new JMenuItem(GetText.tr("Open On Curse"));
-            openOnCurse.addActionListener(e -> {
-                OS.openWebBrowser(getDisableableMod().curseMod.websiteUrl);
-            });
-            contextMenu.add(openOnCurse);
+        JMenuItem fileItem = new JMenuItem(getDisableableMod().file);
+        fileItem.setEnabled(false);
+        contextMenu.add(fileItem);
+        contextMenu.add(new JPopupMenu.Separator());
+
+        if (getDisableableMod().hasFullCurseForgeInformation()) {
+            JMenuItem openOnCurseForge = new JMenuItem(GetText.tr("Open On CurseForge"));
+            openOnCurseForge
+                    .addActionListener(e -> OS.openWebBrowser(getDisableableMod().curseForgeProject.websiteUrl));
+            contextMenu.add(openOnCurseForge);
 
             contextMenu.add(new JPopupMenu.Separator());
+        }
+
+        if (getDisableableMod().isFromModrinth()) {
+            ModrinthMod modrinthMod = getDisableableMod().modrinthMod;
+
+            JMenuItem openOnModrinth = new JMenuItem(GetText.tr("Open On Modrinth"));
+            openOnModrinth.addActionListener(
+                    e -> OS.openWebBrowser(String.format("https://modrinth.com/mod/%s", modrinthMod.slug)));
+            contextMenu.add(openOnModrinth);
+
+            if (modrinthMod.discordUrl != null) {
+                JMenuItem openDiscord = new JMenuItem(GetText.tr("Open Discord"));
+                openDiscord.addActionListener(e -> OS.openWebBrowser(modrinthMod.discordUrl));
+                contextMenu.add(openDiscord);
+            }
+
+            if (modrinthMod.issuesUrl != null) {
+                JMenuItem openIssues = new JMenuItem(GetText.tr("Open Issues"));
+                openIssues.addActionListener(e -> OS.openWebBrowser(modrinthMod.issuesUrl));
+                contextMenu.add(openIssues);
+            }
+
+            if (modrinthMod.sourceUrl != null) {
+                JMenuItem openSourceUrl = new JMenuItem(GetText.tr("Open Source Url"));
+                openSourceUrl.addActionListener(e -> OS.openWebBrowser(modrinthMod.sourceUrl));
+                contextMenu.add(openSourceUrl);
+            }
+
+            if (modrinthMod.wikiUrl != null) {
+                JMenuItem openWiki = new JMenuItem(GetText.tr("Open Wiki"));
+                openWiki.addActionListener(e -> OS.openWebBrowser(modrinthMod.wikiUrl));
+                contextMenu.add(openWiki);
+            }
+
+            contextMenu.add(new JPopupMenu.Separator());
+
+            if (modrinthMod.donationUrls != null && modrinthMod.donationUrls.size() != 0) {
+                for (ModrinthDonationUrl donation : modrinthMod.donationUrls) {
+                    // #. {0} is the name of the platform used for donations (Patreon, paypal, etc)
+                    JMenuItem openDonationLink = new JMenuItem(GetText.tr("Donate ({0})", donation.platform));
+                    openDonationLink.addActionListener(e -> OS.openWebBrowser(donation.url));
+                    contextMenu.add(openDonationLink);
+                }
+
+                contextMenu.add(new JPopupMenu.Separator());
+            }
         }
 
         JMenuItem enableDisableButton = new JMenuItem(
                 getDisableableMod().disabled ? GetText.tr("Enable") : GetText.tr("Disable"));
         enableDisableButton.addActionListener(e -> {
-            if (dialog.instance != null) {
-                if (getDisableableMod().disabled) {
-                    getDisableableMod().enable(dialog.instance);
-                } else {
-                    getDisableableMod().disable(dialog.instance);
-                }
-            } else if (dialog.instanceV2 != null) {
-                if (getDisableableMod().disabled) {
-                    getDisableableMod().enable(dialog.instanceV2);
-                } else {
-                    getDisableableMod().disable(dialog.instanceV2);
-                }
+            if (getDisableableMod().disabled) {
+                getDisableableMod().enable(dialog.instance);
+            } else {
+                getDisableableMod().disable(dialog.instance);
             }
 
             dialog.reloadPanels();
@@ -161,18 +206,10 @@ public class ModsJCheckBox extends JCheckBox {
 
         JMenuItem showInFileExplorer = new JMenuItem(GetText.tr("Show In File Explorer"));
         showInFileExplorer.addActionListener(e -> {
-            if (dialog.instance != null) {
-                if (getDisableableMod().disabled) {
-                    OS.openFileExplorer(getDisableableMod().getDisabledFile(dialog.instance).toPath());
-                } else {
-                    OS.openFileExplorer(getDisableableMod().getFile(dialog.instance).toPath());
-                }
-            } else if (dialog.instanceV2 != null) {
-                if (getDisableableMod().disabled) {
-                    OS.openFileExplorer(getDisableableMod().getDisabledFile(dialog.instanceV2).toPath());
-                } else {
-                    OS.openFileExplorer(getDisableableMod().getFile(dialog.instanceV2).toPath());
-                }
+            if (getDisableableMod().disabled) {
+                OS.openFileExplorer(getDisableableMod().getDisabledFile(dialog.instance).toPath());
+            } else {
+                OS.openFileExplorer(getDisableableMod().getFile(dialog.instance).toPath());
             }
         });
         contextMenu.add(showInFileExplorer);
@@ -181,28 +218,20 @@ public class ModsJCheckBox extends JCheckBox {
 
         JMenuItem remove = new JMenuItem(GetText.tr("Remove"));
         remove.addActionListener(e -> {
-            if (dialog.instance != null) {
-                dialog.instance.removeInstalledMod(getDisableableMod());
-            } else if (dialog.instanceV2 != null) {
-                dialog.instanceV2.launcher.mods.remove(getDisableableMod());
-                Utils.delete((getDisableableMod().isDisabled() ? getDisableableMod().getDisabledFile(dialog.instanceV2)
-                        : getDisableableMod().getFile(dialog.instanceV2)));
-            }
+            dialog.instance.launcher.mods.remove(getDisableableMod());
+            Utils.delete((getDisableableMod().isDisabled() ? getDisableableMod().getDisabledFile(dialog.instance)
+                    : getDisableableMod().getFile(dialog.instance)));
 
             dialog.reloadPanels();
         });
         contextMenu.add(remove);
 
-        if (getDisableableMod().isFromCurse()) {
+        if (getDisableableMod().isFromCurseForge() || getDisableableMod().isFromModrinth()) {
             contextMenu.add(new JPopupMenu.Separator());
 
             JMenuItem reinstall = new JMenuItem(GetText.tr("Reinstall"));
             reinstall.addActionListener(e -> {
-                if (dialog.instance != null) {
-                    getDisableableMod().reinstall(dialog.instance);
-                } else if (dialog.instanceV2 != null) {
-                    getDisableableMod().reinstall(dialog.instanceV2);
-                }
+                getDisableableMod().reinstall(dialog, dialog.instance);
 
                 dialog.reloadPanels();
             });
@@ -210,10 +239,13 @@ public class ModsJCheckBox extends JCheckBox {
 
             JMenuItem checkForUpdates = new JMenuItem(GetText.tr("Check For Updates"));
             checkForUpdates.addActionListener(e -> {
-                if (dialog.instance != null) {
-                    getDisableableMod().checkForUpdate(dialog.instance);
-                } else if (dialog.instanceV2 != null) {
-                    getDisableableMod().checkForUpdate(dialog.instanceV2);
+                boolean updated = false;
+
+                updated = getDisableableMod().checkForUpdate(dialog, dialog.instance);
+
+                if (!updated) {
+                    DialogManager.okDialog().setTitle(GetText.tr("No Updates Found"))
+                            .setContent(GetText.tr("No updates were found.")).show();
                 }
 
                 dialog.reloadPanels();

@@ -1,6 +1,6 @@
 /*
  * ATLauncher - https://github.com/ATLauncher/ATLauncher
- * Copyright (C) 2013-2020 ATLauncher
+ * Copyright (C) 2013-2021 ATLauncher
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -34,9 +34,15 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.lang.reflect.Method;
+import java.net.InetSocketAddress;
+import java.net.Proxy;
+import java.net.ProxySelector;
+import java.net.SocketAddress;
+import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.Properties;
@@ -52,9 +58,8 @@ import javax.swing.UIManager;
 import javax.swing.text.DefaultEditorKit;
 
 import com.atlauncher.builders.HTMLBuilder;
-import com.atlauncher.data.Constants;
+import com.atlauncher.constants.Constants;
 import com.atlauncher.data.Instance;
-import com.atlauncher.data.InstanceV2;
 import com.atlauncher.data.Language;
 import com.atlauncher.data.Pack;
 import com.atlauncher.data.Settings;
@@ -73,6 +78,9 @@ import com.atlauncher.utils.Java;
 import com.atlauncher.utils.OS;
 import com.atlauncher.utils.Utils;
 import com.formdev.flatlaf.extras.FlatInspector;
+import com.formdev.flatlaf.extras.FlatUIDefaultsInspector;
+
+import org.mini2Dx.gettext.GetText;
 
 import io.github.asyncronous.toast.Toaster;
 import joptsimple.OptionParser;
@@ -119,6 +127,14 @@ public class App {
     public static boolean discordInitialized = false;
 
     /**
+     * This allows skipping the setup dialog on first run. This is mainly used for
+     * automation tests. It can be skipped with the below command line argument.
+     * <p/>
+     * --skip-setup-dialog
+     */
+    public static boolean skipSetupDialog = false;
+
+    /**
      * This allows skipping the system tray integration so that the launcher doesn't
      * even try to show the icon and menu etc, in the users system tray. It can be
      * skipped with the below command line argument.
@@ -126,6 +142,15 @@ public class App {
      * --skip-tray-integration
      */
     public static boolean skipTrayIntegration = false;
+
+    /**
+     * This allows skipping the in built analytics collection. This is mainly useful
+     * for development when you don't want to report analytics. For end users, this
+     * can be turned off in the launcher setup or through the settings.
+     * <p/>
+     * --disable-analytics
+     */
+    public static boolean disableAnalytics = false;
 
     /**
      * This allows skipping the in built error reporting. This is mainly useful for
@@ -158,6 +183,14 @@ public class App {
      * --working-dir=C:/Games/ATLauncher
      */
     public static Path workingDir = null;
+
+    /**
+     * This will tell the launcher to allow all SSL certs regardless of validity.
+     * This is insecure and only intended for development purposes.
+     * <p/>
+     * --allow-all-ssl-certs
+     */
+    public static boolean allowAllSslCerts = false;
 
     /**
      * This forces the launcher to not check for a launcher update. It can be
@@ -223,8 +256,10 @@ public class App {
     public static TrayIcon trayIcon;
 
     static {
-        // Prefer to use IPv4
-        System.setProperty("java.net.preferIPv4Stack", "true");
+        // Prefer to use IPv4 if `java.net.preferIPv6Addresses` is set
+        if (System.getProperty("java.net.preferIPv6Addresses") == null) {
+            System.setProperty("java.net.preferIPv4Stack", "true");
+        }
 
         // Sets up where all uncaught exceptions go to.
         Thread.setDefaultUncaughtExceptionHandler(new ExceptionStrainer());
@@ -258,6 +293,14 @@ public class App {
         // Load the settings from json, convert old properties config and validate it
         loadSettings();
 
+        // after settings have loaded, then allow all ssl certs if required
+        if (allowAllSslCerts) {
+            Network.allowAllSslCerts();
+        }
+
+        // check for bad install locations (OneDrive, Program Files)
+        checkForBadFolderInstall();
+
         // Setup the Launcher and wait for it to finish.
         launcher = new Launcher();
 
@@ -285,9 +328,7 @@ public class App {
 
         if (!noConsole && settings.enableConsole) {
             // Show the console if enabled.
-            SwingUtilities.invokeLater(() -> {
-                console.setVisible(true);
-            });
+            SwingUtilities.invokeLater(() -> console.setVisible(true));
         }
 
         if (settings.enableTrayMenu && !skipTrayIntegration) {
@@ -310,25 +351,22 @@ public class App {
         LogManager.info("Launcher finished loading everything");
 
         if (settings.firstTimeRun) {
-            LogManager.warn("Launcher not setup. Loading Setup Dialog");
-            new SetupDialog();
+            if (skipSetupDialog) {
+                App.settings.firstTimeRun = false;
+                App.settings.save();
+            } else {
+                LogManager.warn("Launcher not setup. Loading Setup Dialog");
+                new SetupDialog();
+            }
         }
 
         boolean open = true;
 
         if (autoLaunch != null) {
-            if (InstanceManager.isInstanceBySafeName(autoLaunch)) {
-                Instance instance = InstanceManager.getInstanceBySafeName(autoLaunch);
-                LogManager.info("Opening Instance " + instance.getName());
-                if (instance.launch()) {
-                    open = false;
-                } else {
-                    LogManager.error("Error Opening Instance " + instance.getName());
-                }
-            } else if (InstanceManager.getInstances().stream()
+            if (InstanceManager.getInstances().stream()
                     .anyMatch(instance -> instance.getSafeName().equalsIgnoreCase(autoLaunch))) {
-                Optional<InstanceV2> instance = InstanceManager.getInstances().stream()
-                        .filter(instanceV2 -> instanceV2.getSafeName().equalsIgnoreCase(autoLaunch)).findFirst();
+                Optional<Instance> instance = InstanceManager.getInstances().stream()
+                        .filter(i -> i.getSafeName().equalsIgnoreCase(autoLaunch)).findFirst();
 
                 if (instance.isPresent()) {
                     LogManager.info("Opening Instance " + instance.get().launcher.name);
@@ -352,6 +390,7 @@ public class App {
                 Runtime.getRuntime().addShutdownHook(new Thread(DiscordRPC::discordShutdown));
             } catch (Throwable e) {
                 LogManager.logStackTrace("Failed to initialize Discord integration", e);
+                discordInitialized = false;
             }
         }
 
@@ -381,11 +420,10 @@ public class App {
     }
 
     private static void logSystemInformation() {
-
         LogManager.info(Constants.LAUNCHER_NAME + " Version: " + Constants.VERSION);
 
-        SwingUtilities.invokeLater(() -> Java.getInstalledJavas().stream()
-                .forEach(version -> LogManager.debug(Gsons.DEFAULT.toJson(version))));
+        SwingUtilities.invokeLater(
+                () -> Java.getInstalledJavas().forEach(version -> LogManager.debug(Gsons.DEFAULT.toJson(version))));
 
         LogManager.info("Java Version: " + Java.getActualJavaVersion());
 
@@ -433,6 +471,12 @@ public class App {
     private static void checkInstalledCorrectly() {
         boolean matched = false;
 
+        // user used the installer
+        if (Files.exists(FileSystem.BASE_DIR.resolve("unins000.dat"))
+                && Files.exists(FileSystem.BASE_DIR.resolve("unins000.exe"))) {
+            return;
+        }
+
         if ((Files.notExists(FileSystem.CONFIGS) && Files.notExists(FileSystem.BASE_DIR.resolve("Configs")))
                 && FileSystem.CONFIGS.getParent().toFile().listFiles().length > 1) {
             matched = true;
@@ -472,6 +516,76 @@ public class App {
                     .setType(DialogManager.ERROR).show() != 0) {
                 System.exit(0);
             }
+        }
+    }
+
+    private static void checkForBadFolderInstall() {
+        if (!settings.ignoreOneDriveWarning && FileSystem.BASE_DIR.toString().contains("OneDrive")) {
+            LogManager.warn("ATLauncher installed within OneDrive!");
+
+            int ret = DialogManager.yesNoDialog().addOption(GetText.tr("Don't remind me again"))
+                    .setTitle(GetText.tr("ATLauncher installed within OneDrive"))
+                    .setContent(new HTMLBuilder().center().text(GetText.tr(
+                            "We have detected that you're running ATLauncher from within OneDrive.<br/><br/>This can cause serious issues and you should move the folder outside of OneDrive.<br/><br/>Do you want to close the launcher and do this now?"))
+                            .build())
+                    .setType(DialogManager.WARNING).show();
+
+            if (ret == 0) {
+                OS.openFileExplorer(FileSystem.BASE_DIR, true);
+                System.exit(0);
+            } else if (ret == 2) {
+                settings.ignoreOneDriveWarning = true;
+                settings.save();
+            }
+        }
+
+        if (OS.isWindows() && !settings.ignoreProgramFilesWarning
+                && FileSystem.BASE_DIR.toString().contains("Program Files")) {
+            LogManager.warn("ATLauncher installed within Program Files!");
+
+            int ret = DialogManager.yesNoDialog().addOption(GetText.tr("Don't remind me again"))
+                    .setTitle(GetText.tr("ATLauncher installed within Program Files"))
+                    .setContent(new HTMLBuilder().center().text(GetText.tr(
+                            "We have detected that you're running ATLauncher from within Program Files.<br/><br/>This can cause serious issues and you should move the folder outside of Program Files.<br/><br/>Do you want to close the launcher and do this now?"))
+                            .build())
+                    .setType(DialogManager.WARNING).show();
+
+            if (ret == 0) {
+                OS.openFileExplorer(FileSystem.BASE_DIR, true);
+                System.exit(0);
+            } else if (ret == 2) {
+                settings.ignoreProgramFilesWarning = true;
+                settings.save();
+            }
+        }
+
+        File testFile = FileSystem.BASE_DIR.resolve(".test").toFile();
+
+        try {
+            if ((!testFile.exists() && !testFile.createNewFile())
+                    || !FileSystem.BASE_DIR.resolve(".test").toFile().canWrite()) {
+                LogManager.error("ATLauncher cannot write files!");
+
+                DialogManager.okDialog().setTitle(GetText.tr("ATLauncher cannot write files"))
+                        .setContent(new HTMLBuilder().center().text(GetText.tr(
+                                "We have detected that ATLauncher cannot write files in it's current location.<br/><br/>We cannot continue to run, you must move this folder somewhere else with write access.<br/><br/>Try moving to a folder in your Desktop or another drive.<br/><br/>You can also try running ATLauncher as administrator, but this is not recommended."))
+                                .build())
+                        .setType(DialogManager.ERROR).show();
+
+                OS.openFileExplorer(FileSystem.BASE_DIR, true);
+                System.exit(0);
+            }
+        } catch (IOException e) {
+            LogManager.error("ATLauncher cannot write files!");
+
+            DialogManager.okDialog().setTitle(GetText.tr("ATLauncher cannot write files"))
+                    .setContent(new HTMLBuilder().center().text(GetText.tr(
+                            "We have detected that ATLauncher cannot write files in it's current location.<br/><br/>We cannot continue to run, you must move this folder somewhere else with write access.<br/><br/>Try moving to a folder in your Desktop or another drive.<br/><br/>You can also try running ATLauncher as administrator, but this is not recommended."))
+                            .build())
+                    .setType(DialogManager.ERROR).show();
+
+            OS.openFileExplorer(FileSystem.BASE_DIR, true);
+            System.exit(0);
         }
     }
 
@@ -576,6 +690,7 @@ public class App {
         // non release versions
         if (!Constants.VERSION.isReleaseStream()) {
             FlatInspector.install("ctrl shift alt X");
+            FlatUIDefaultsInspector.install("ctrl shift alt Y");
         }
 
         // register the fonts so they can show within HTML
@@ -745,18 +860,27 @@ public class App {
         // Parse all the command line arguments
         OptionParser parser = new OptionParser();
         parser.accepts("updated").withOptionalArg().ofType(Boolean.class);
+        parser.accepts("skip-setup-dialog").withOptionalArg().ofType(Boolean.class);
         parser.accepts("skip-tray-integration").withOptionalArg().ofType(Boolean.class);
+        parser.accepts("disable-analytics").withOptionalArg().ofType(Boolean.class);
         parser.accepts("disable-error-reporting").withOptionalArg().ofType(Boolean.class);
         parser.accepts("skip-integration").withOptionalArg().ofType(Boolean.class);
         parser.accepts("skip-hash-checking").withOptionalArg().ofType(Boolean.class);
         parser.accepts("force-offline-mode").withOptionalArg().ofType(Boolean.class);
         parser.accepts("working-dir").withRequiredArg().ofType(String.class);
+        parser.accepts("base-launcher-domain").withRequiredArg().ofType(String.class);
+        parser.accepts("base-cdn-domain").withRequiredArg().ofType(String.class);
+        parser.accepts("base-cdn-path").withRequiredArg().ofType(String.class);
+        parser.accepts("allow-all-ssl-certs").withOptionalArg().ofType(Boolean.class);
         parser.accepts("no-launcher-update").withOptionalArg().ofType(Boolean.class);
         parser.accepts("no-console").withOptionalArg().ofType(Boolean.class);
         parser.accepts("close-launcher").withOptionalArg().ofType(Boolean.class);
         parser.accepts("debug").withOptionalArg().ofType(Boolean.class);
         parser.accepts("debug-level").withRequiredArg().ofType(Integer.class);
         parser.accepts("launch").withRequiredArg().ofType(String.class);
+        parser.accepts("proxy-type").withRequiredArg().ofType(String.class);
+        parser.accepts("proxy-host").withRequiredArg().ofType(String.class);
+        parser.accepts("proxy-port").withRequiredArg().ofType(Integer.class);
 
         OptionSet options = parser.parse(args);
         autoLaunch = options.has("launch") ? (String) options.valueOf("launch") : null;
@@ -776,9 +900,19 @@ public class App {
             LogManager.debug("Debug level has been set to " + options.valueOf("debug-level") + "!");
         }
 
+        skipSetupDialog = options.has("skip-setup-dialog");
+        if (skipSetupDialog) {
+            LogManager.debug("Skipping setup dialog!");
+        }
+
         skipTrayIntegration = options.has("skip-tray-integration");
         if (skipTrayIntegration) {
             LogManager.debug("Skipping tray integration!");
+        }
+
+        disableAnalytics = options.has("disable-analytics");
+        if (disableAnalytics) {
+            LogManager.debug("Disabling analytics!");
         }
 
         disableErrorReporting = options.has("disable-error-reporting");
@@ -794,6 +928,32 @@ public class App {
             } else {
                 LogManager.error("Cannot set working directory to " + workingDirTemp + " as it doesn't exist!");
             }
+        }
+
+        if (options.has("base-launcher-domain")) {
+            String baseLauncherDomain = String.valueOf(options.valueOf("base-launcher-domain"));
+
+            Constants.setBaseLauncherDomain(baseLauncherDomain);
+            LogManager.warn("Base launcher domain set to " + baseLauncherDomain);
+        }
+
+        if (options.has("base-cdn-domain")) {
+            String baseCdnDomain = String.valueOf(options.valueOf("base-cdn-domain"));
+
+            Constants.setBaseCdnDomain(baseCdnDomain);
+            LogManager.warn("Base cdn domain set to " + baseCdnDomain);
+        }
+
+        if (options.has("base-cdn-path")) {
+            String baseCdnPath = String.valueOf(options.valueOf("base-cdn-path"));
+
+            Constants.setBaseCdnPath(baseCdnPath);
+            LogManager.warn("Base cdn path set to " + baseCdnPath);
+        }
+
+        allowAllSslCerts = options.has("allow-all-ssl-certs");
+        if (allowAllSslCerts) {
+            LogManager.warn("Allowing all ssl certs. This is insecure and should only be used for development.");
         }
 
         noLauncherUpdate = options.has("no-launcher-update");
@@ -819,6 +979,29 @@ public class App {
         skipHashChecking = options.has("skip-hash-checking");
         if (skipHashChecking) {
             LogManager.debug("Skipping hash checking! Don't ask for support with this enabled!");
+        }
+
+        if (options.has("proxy-type") && options.has("proxy-host") && options.has("proxy-port")) {
+            String proxyType = String.valueOf(options.valueOf("proxy-type"));
+            String proxyHost = String.valueOf(options.valueOf("proxy-host"));
+            Integer proxyPort = (Integer) options.valueOf("proxy-port");
+
+            Proxy proxy = new java.net.Proxy(java.net.Proxy.Type.valueOf(proxyType),
+                    new InetSocketAddress(proxyHost, proxyPort));
+
+            LogManager.warn("Proxy set to " + proxy);
+
+            ProxySelector.setDefault(new ProxySelector() {
+                @Override
+                public List<java.net.Proxy> select(URI uri) {
+                    return Arrays.asList(proxy);
+                }
+
+                @Override
+                public void connectFailed(URI uri, SocketAddress sa, IOException e) {
+                    LogManager.logStackTrace("Connection could not be established to proxy at socket [" + sa + "]", e);
+                }
+            });
         }
     }
 }

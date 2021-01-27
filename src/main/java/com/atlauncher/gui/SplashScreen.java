@@ -1,6 +1,6 @@
 /*
  * ATLauncher - https://github.com/ATLauncher/ATLauncher
- * Copyright (C) 2013-2020 ATLauncher
+ * Copyright (C) 2013-2021 ATLauncher
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -73,7 +73,7 @@ public class SplashScreen extends JWindow {
      * The context menu which is shows on right click for the splash screen image,
      * giving a force quit option.
      */
-    private final class ContextMenu extends JPopupMenu {
+    private static final class ContextMenu extends JPopupMenu {
         public ContextMenu() {
             super();
 
