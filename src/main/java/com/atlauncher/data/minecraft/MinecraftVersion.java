@@ -24,9 +24,11 @@ import com.atlauncher.annot.Json;
 @Json
 public class MinecraftVersion {
     public String id;
+    public int complianceLevel;
+    public JavaVersion javaVersion;
     public Arguments arguments;
     public String minecraftArguments;
-    public String type;
+    public VersionManifestVersionType type;
     public String time;
     public String releaseTime;
     public String minimumLauncherVersion;

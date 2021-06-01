@@ -26,6 +26,7 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.net.URLDecoder;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -42,6 +43,7 @@ import com.atlauncher.gui.tabs.InstancesTab;
 import com.atlauncher.gui.tabs.NewsTab;
 import com.atlauncher.gui.tabs.PacksTab;
 import com.atlauncher.gui.tabs.ServersTab;
+import com.atlauncher.gui.tabs.VanillaPacksTab;
 import com.atlauncher.managers.AccountManager;
 import com.atlauncher.managers.CheckingServersManager;
 import com.atlauncher.managers.CurseForgeUpdateManager;
@@ -77,7 +79,7 @@ public class Launcher {
     private InstancesTab instancesPanel; // The instances panel
     private ServersTab serversPanel; // The instances panel
     private NewsTab newsPanel; // The news panel
-    private PacksTab vanillaPacksPanel; // The vanilla packs panel
+    private VanillaPacksTab vanillaPacksPanel; // The vanilla packs panel
     private PacksTab featuredPacksPanel; // The featured packs panel
     private PacksTab packsPanel; // The packs panel
 
@@ -94,7 +96,7 @@ public class Launcher {
 
             DialogManager.optionDialog().setTitle(GetText.tr("Unsupported Java Version"))
                     .setContent(new HTMLBuilder().center().text(GetText.tr(
-                            "You're using an unsupported version of Java. You need to upgrade your Java to at minimum Java 8 version 101.<br/><br/>The launcher will not start until you do this.<br/><br/>If you're seeing this message even after installing a newer version, you may need to uninstall the old version first.<br/><br/>Click ok to open the Java download page and close the launcher."))
+                            "You're using an unsupported version of Java. You need to upgrade your Java to at minimum Java 8 version 141.<br/><br/>The launcher will not start until you do this.<br/><br/>If you're seeing this message even after installing a newer version, you may need to uninstall the old version first.<br/><br/>Click ok to open the Java download page and close the launcher."))
                             .build())
                     .addOption(GetText.tr("Ok")).setType(DialogManager.ERROR).show();
 
@@ -116,6 +118,11 @@ public class Launcher {
         NewsManager.loadNews(); // Load the news
 
         MinecraftManager.loadMinecraftVersions(); // Load info about the different Minecraft versions
+
+        // Load info about the different java runtimes
+        App.TASKPOOL.execute(() -> {
+            MinecraftManager.loadJavaRuntimes();
+        });
 
         PackManager.loadPacks(); // Load the Packs available in the Launcher
 
@@ -270,6 +277,9 @@ public class Launcher {
         arguments.add(currentPath);
         arguments.add(temporaryUpdatePath);
 
+        // pass in all the original arguments
+        arguments.addAll(Arrays.asList(App.PASSED_ARGS));
+
         ProcessBuilder processBuilder = new ProcessBuilder();
         processBuilder.command(arguments);
 
@@ -357,7 +367,7 @@ public class Launcher {
         return downloads.stream().anyMatch(com.atlauncher.network.Download::needToDownload);
     }
 
-    private void checkForExternalPackUpdates() {
+    public void checkForExternalPackUpdates() {
         if (updateThread != null && updateThread.isAlive()) {
             updateThread.interrupt();
         }
@@ -371,6 +381,15 @@ public class Launcher {
             }
         });
         updateThread.start();
+    }
+
+    public void updateData() {
+        if (checkForUpdatedFiles()) {
+            reloadLauncherData();
+        }
+
+        MinecraftManager.loadMinecraftVersions(); // Load info about the different Minecraft versions
+        MinecraftManager.loadJavaRuntimes(); // Load info about the different java runtimes
     }
 
     public void reloadLauncherData() {
@@ -388,10 +407,10 @@ public class Launcher {
             checkForLauncherUpdate();
             checkForExternalPackUpdates();
             addExecutableBitToTools();
+
             NewsManager.loadNews(); // Load the news
             reloadNewsPanel(); // Reload news panel
             PackManager.loadPacks(); // Load the Packs available in the Launcher
-            reloadVanillaPacksPanel(); // Reload packs panel
             reloadFeaturedPacksPanel(); // Reload packs panel
             reloadPacksPanel(); // Reload packs panel
             PackManager.loadUsers(); // Load the Testers and Allowed Players for the packs
@@ -406,12 +425,23 @@ public class Launcher {
 
     private void checkForLauncherUpdate() {
         PerformanceManager.start();
-        if (App.noLauncherUpdate) {
-            return;
-        }
 
         LogManager.debug("Checking for launcher update");
         if (launcherHasUpdate()) {
+            if (App.noLauncherUpdate) {
+                int ret = DialogManager.okDialog().setTitle("Launcher Update Available")
+                        .setContent(new HTMLBuilder().center().split(80).text(GetText.tr(
+                                "An update to the launcher is available. Please update via your package manager or manually by visiting https://atlauncher.com/downloads to get the latest features and bug fixes."))
+                                .build())
+                        .addOption(GetText.tr("Visit Downloads Page")).setType(DialogManager.INFO).show();
+
+                if (ret == 1) {
+                    OS.openWebBrowser("https://atlauncher.com/downloads");
+                }
+
+                return;
+            }
+
             if (!App.wasUpdated) {
                 downloadUpdate(); // Update the Launcher
             } else {
@@ -500,7 +530,7 @@ public class Launcher {
      *
      * @param vanillaPacksPanel Vanilla Packs Panel
      */
-    public void setVanillaPacksPanel(PacksTab vanillaPacksPanel) {
+    public void setVanillaPacksPanel(VanillaPacksTab vanillaPacksPanel) {
         this.vanillaPacksPanel = vanillaPacksPanel;
     }
 
@@ -536,20 +566,6 @@ public class Launcher {
      */
     public void reloadNewsPanel() {
         this.newsPanel.reload(); // Reload the news panel
-    }
-
-    /**
-     * Reloads the panel used for Vanilla Packs
-     */
-    public void reloadVanillaPacksPanel() {
-        this.vanillaPacksPanel.reload();
-    }
-
-    /**
-     * Refreshes the panel used for Vanilla Packs
-     */
-    public void refreshVanillaPacksPanel() {
-        this.vanillaPacksPanel.refresh();
     }
 
     /**

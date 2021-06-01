@@ -27,19 +27,18 @@ import java.util.Optional;
 import javax.swing.JComponent;
 import javax.swing.TransferHandler;
 
+import com.atlauncher.App;
 import com.atlauncher.data.DisableableMod;
 import com.atlauncher.data.Type;
 import com.atlauncher.data.curseforge.CurseForgeFingerprint;
 import com.atlauncher.data.curseforge.CurseForgeFingerprintedMod;
 import com.atlauncher.data.minecraft.FabricMod;
 import com.atlauncher.data.minecraft.MCMod;
-import com.atlauncher.exceptions.InvalidMinecraftVersion;
 import com.atlauncher.gui.dialogs.EditModsDialog;
 import com.atlauncher.gui.dialogs.FileTypeDialog;
 import com.atlauncher.gui.dialogs.ProgressDialog;
 import com.atlauncher.managers.DialogManager;
 import com.atlauncher.managers.LogManager;
-import com.atlauncher.managers.MinecraftManager;
 import com.atlauncher.utils.CurseForgeApi;
 import com.atlauncher.utils.Hashing;
 import com.atlauncher.utils.Utils;
@@ -75,19 +74,7 @@ public class ModsJCheckBoxTransferHandler extends TransferHandler {
             Type type;
             File instanceFile;
 
-            boolean usesCoreMods = false;
-            try {
-                usesCoreMods = MinecraftManager.getMinecraftVersion(dialog.instance.id).coremods;
-            } catch (InvalidMinecraftVersion e1) {
-                LogManager.logStackTrace(e1);
-            }
-            String[] modTypes;
-            if (usesCoreMods) {
-                modTypes = new String[] { "Mods Folder", "Inside Minecraft.jar", "CoreMods Mod", "Texture Pack",
-                        "Shader Pack" };
-            } else {
-                modTypes = new String[] { "Mods Folder", "Inside Minecraft.jar", "Resource Pack", "Shader Pack" };
-            }
+            String[] modTypes = new String[] { "Mods Folder", "Inside Minecraft.jar", "Resource Pack", "Shader Pack" };
 
             FileTypeDialog fcd = new FileTypeDialog(GetText.tr("Add Mod"), GetText.tr("Adding Mods"), GetText.tr("Add"),
                     GetText.tr("Type"), modTypes);
@@ -119,7 +106,7 @@ public class ModsJCheckBoxTransferHandler extends TransferHandler {
             }
 
             final ProgressDialog progressDialog = new ProgressDialog(GetText.tr("Copying Mods"), 0,
-                    GetText.tr("Copying Mods"));
+                    GetText.tr("Copying Mods"), dialog);
 
             progressDialog.addThread(new Thread(() -> {
                 for (Object item : data) {
@@ -162,30 +149,33 @@ public class ModsJCheckBoxTransferHandler extends TransferHandler {
                         }
                     }
 
-                    try {
-                        long murmurHash = Hashing.murmur(file.toPath());
+                    if (!App.settings.dontCheckModsOnCurseForge) {
+                        try {
+                            long murmurHash = Hashing.murmur(file.toPath());
 
-                        LogManager.debug("File " + file.getName() + " has murmur hash of " + murmurHash);
+                            LogManager.debug("File " + file.getName() + " has murmur hash of " + murmurHash);
 
-                        CurseForgeFingerprint fingerprintResponse = CurseForgeApi.checkFingerprint(murmurHash);
+                            CurseForgeFingerprint fingerprintResponse = CurseForgeApi.checkFingerprint(murmurHash);
 
-                        if (fingerprintResponse.exactMatches.size() == 1) {
-                            CurseForgeFingerprintedMod foundMod = fingerprintResponse.exactMatches.get(0);
+                            if (fingerprintResponse.exactMatches.size() == 1) {
+                                CurseForgeFingerprintedMod foundMod = fingerprintResponse.exactMatches.get(0);
 
-                            // add CurseForge information
-                            mod.curseForgeProject = CurseForgeApi.getProjectById(foundMod.id);
-                            mod.curseForgeProjectId = foundMod.id;
-                            mod.curseForgeFile = foundMod.file;
-                            mod.curseForgeFileId = foundMod.file.id;
+                                // add CurseForge information
+                                mod.curseForgeProject = CurseForgeApi.getProjectById(foundMod.id);
+                                mod.curseForgeProjectId = foundMod.id;
+                                mod.curseForgeFile = foundMod.file;
+                                mod.curseForgeFileId = foundMod.file.id;
 
-                            mod.name = mod.curseForgeProject.name;
-                            mod.description = mod.curseForgeProject.summary;
+                                mod.name = mod.curseForgeProject.name;
+                                mod.description = mod.curseForgeProject.summary;
 
-                            LogManager.debug("Found matching mod from CurseForge called " + mod.curseForgeProject.name
-                                    + " with file named " + mod.curseForgeFile.displayName);
+                                LogManager
+                                        .debug("Found matching mod from CurseForge called " + mod.curseForgeProject.name
+                                                + " with file named " + mod.curseForgeFile.displayName);
+                            }
+                        } catch (IOException e1) {
+                            LogManager.logStackTrace(e1);
                         }
-                    } catch (IOException e1) {
-                        LogManager.logStackTrace(e1);
                     }
 
                     if (!copyTo.exists()) {

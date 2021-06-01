@@ -50,6 +50,7 @@ import com.atlauncher.gui.tabs.ServersTab;
 import com.atlauncher.gui.tabs.SettingsTab;
 import com.atlauncher.gui.tabs.Tab;
 import com.atlauncher.gui.tabs.ToolsTab;
+import com.atlauncher.gui.tabs.VanillaPacksTab;
 import com.atlauncher.managers.AccountManager;
 import com.atlauncher.managers.LogManager;
 import com.atlauncher.managers.PackManager;
@@ -73,7 +74,7 @@ public final class LauncherFrame extends JFrame implements RelocalizationListene
         setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
         setResizable(true);
         setLayout(new BorderLayout());
-        setIconImage(Utils.getImage("/assets/image/Icon.png"));
+        setIconImage(Utils.getImage("/assets/image/icon.png"));
 
         setMinimumSize(new Dimension(1200, 700));
         setLocationRelativeTo(null);
@@ -197,17 +198,17 @@ public final class LauncherFrame extends JFrame implements RelocalizationListene
         PerformanceManager.end("newsTab");
 
         PerformanceManager.start("vanillaPacksTab");
-        PacksTab vanillaPacksTab = new PacksTab(false, true);
+        VanillaPacksTab vanillaPacksTab = new VanillaPacksTab();
         App.launcher.setVanillaPacksPanel(vanillaPacksTab);
         PerformanceManager.end("vanillaPacksTab");
 
         PerformanceManager.start("featuredPacksTab");
-        PacksTab featuredPacksTab = new PacksTab(true, false);
+        PacksTab featuredPacksTab = new PacksTab(true);
         App.launcher.setFeaturedPacksPanel(featuredPacksTab);
         PerformanceManager.end("featuredPacksTab");
 
         PerformanceManager.start("packsTab");
-        PacksTab packsTab = new PacksTab(false, false);
+        PacksTab packsTab = new PacksTab(false);
         App.launcher.setPacksPanel(packsTab);
         PerformanceManager.end("packsTab");
 

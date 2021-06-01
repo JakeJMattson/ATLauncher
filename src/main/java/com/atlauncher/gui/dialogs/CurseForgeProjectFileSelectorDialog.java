@@ -99,9 +99,10 @@ public class CurseForgeProjectFileSelectorDialog extends JDialog {
         setTitle(GetText.tr("Installing {0}", mod.name));
 
         setSize(550, 200);
+        setMinimumSize(new Dimension(550, 200));
         setLocationRelativeTo(App.launcher.getParent());
         setLayout(new BorderLayout());
-        setResizable(false);
+        setResizable(true);
         this.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
 
         addButton = new JButton(GetText.tr("Add"));
@@ -152,7 +153,7 @@ public class CurseForgeProjectFileSelectorDialog extends JDialog {
 
             ProgressDialog progressDialog = new ProgressDialog<>(
                     // #. {0} is the name of the mod we're installing
-                    GetText.tr("Installing {0}", file.displayName), false);
+                    GetText.tr("Installing {0}", file.displayName), false, this);
             progressDialog.addThread(new Thread(() -> {
                 Analytics.sendEvent(mod.name + " - " + file.displayName, "AddFile", "CurseForgeMod");
                 instance.addFileFromCurse(mod, file, progressDialog);
@@ -160,6 +161,7 @@ public class CurseForgeProjectFileSelectorDialog extends JDialog {
                 progressDialog.close();
             }));
             progressDialog.start();
+            dispose();
         });
 
         filesDropdown.addActionListener(e -> {
@@ -224,7 +226,7 @@ public class CurseForgeProjectFileSelectorDialog extends JDialog {
             } else if (App.settings.addModRestriction == AddModRestriction.LAX) {
                 try {
                     List<String> minecraftVersionsToSearch = MinecraftManager
-                            .getMajorMinecraftVersions(this.instance.id).stream().map(mv -> mv.version)
+                            .getMajorMinecraftVersions(this.instance.id).stream().map(mv -> mv.id)
                             .collect(Collectors.toList());
 
                     curseForgeFilesStream = curseForgeFilesStream
@@ -233,6 +235,19 @@ public class CurseForgeProjectFileSelectorDialog extends JDialog {
                     LogManager.logStackTrace(e);
                 }
             }
+
+            // filter out mods that are explicitely for Forge/Fabric and not our loader
+            curseForgeFilesStream = curseForgeFilesStream.filter(cf -> {
+                if (cf.gameVersion.contains("Forge") && loaderVersion.isFabric()) {
+                    return false;
+                }
+
+                if (cf.gameVersion.contains("Fabric") && !loaderVersion.isFabric()) {
+                    return false;
+                }
+
+                return true;
+            });
 
             files.addAll(curseForgeFilesStream.collect(Collectors.toList()));
 

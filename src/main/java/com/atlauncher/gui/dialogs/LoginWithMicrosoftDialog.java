@@ -19,11 +19,19 @@ package com.atlauncher.gui.dialogs;
 
 import java.awt.BorderLayout;
 import java.awt.Dimension;
+import java.awt.FlowLayout;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
 import java.io.IOException;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 
+import javax.swing.BorderFactory;
+import javax.swing.JButton;
 import javax.swing.JDialog;
+import javax.swing.JLabel;
+import javax.swing.JPanel;
+import javax.swing.JTextField;
 
 import com.atlauncher.App;
 import com.atlauncher.Gsons;
@@ -69,6 +77,33 @@ public final class LoginWithMicrosoftDialog extends JDialog {
         this.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
 
         this.add(new LoadingPanel(GetText.tr("Browser opened to complete the login process")), BorderLayout.CENTER);
+
+        JPanel bottomPanel = new JPanel(new BorderLayout());
+        JPanel linkPanel = new JPanel(new FlowLayout());
+
+        JTextField linkTextField = new JTextField(Constants.MICROSOFT_LOGIN_URL);
+        linkTextField.setPreferredSize(new Dimension(300, 23));
+        linkPanel.add(linkTextField, BorderLayout.SOUTH);
+
+        JButton linkCopyButton = new JButton("Copy");
+        linkCopyButton.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                linkTextField.selectAll();
+                OS.copyToClipboard(Constants.MICROSOFT_LOGIN_URL);
+            }
+        });
+        linkPanel.add(linkCopyButton);
+
+        JLabel infoLabel = new JLabel("<html>"
+                + GetText.tr("If your browser hasn't opened, please manually open the below link in your browser")
+                + "</html>");
+        infoLabel.setBorder(BorderFactory.createEmptyBorder(0, 32, 0, 32));
+
+        bottomPanel.add(infoLabel, BorderLayout.CENTER);
+        bottomPanel.add(linkPanel, BorderLayout.SOUTH);
+
+        this.add(bottomPanel, BorderLayout.SOUTH);
 
         setVisible(false);
         dispose();
@@ -179,6 +214,7 @@ public final class LoginWithMicrosoftDialog extends JDialog {
             xstsAuthResponse = MicrosoftAuthAPI.getXstsToken(xblToken);
         } catch (DownloadException e) {
             if (e.response != null) {
+                LogManager.debug(Gsons.DEFAULT.toJson(e.response));
                 XboxLiveAuthErrorResponse xboxLiveAuthErrorResponse = Gsons.DEFAULT.fromJson(e.response,
                         XboxLiveAuthErrorResponse.class);
 
@@ -213,6 +249,8 @@ public final class LoginWithMicrosoftDialog extends JDialog {
         LoginResponse loginResponse = MicrosoftAuthAPI.loginToMinecraft("XBL3.0 x=" + xblUhs + ";" + xblXsts);
 
         Store store = MicrosoftAuthAPI.getMcEntitlements(loginResponse.accessToken);
+
+        LogManager.info(Gsons.DEFAULT.toJson(store));
 
         if (!(store.items.stream().anyMatch(i -> i.name.equalsIgnoreCase("product_minecraft"))
                 && store.items.stream().anyMatch(i -> i.name.equalsIgnoreCase("game_minecraft")))) {

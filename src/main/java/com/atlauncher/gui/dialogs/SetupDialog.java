@@ -36,6 +36,7 @@ import javax.swing.JPanel;
 
 import com.atlauncher.App;
 import com.atlauncher.constants.Constants;
+import com.atlauncher.constants.UIConstants;
 import com.atlauncher.data.Language;
 import com.atlauncher.evnt.listener.RelocalizationListener;
 import com.atlauncher.evnt.manager.RelocalizationManager;
@@ -65,7 +66,7 @@ public class SetupDialog extends JDialog implements RelocalizationListener {
         this.setSize(400, 250);
         setLocationRelativeTo(null);
         setLayout(new BorderLayout());
-        setIconImage(Utils.getImage("/assets/image/Icon.png"));
+        setIconImage(Utils.getImage("/assets/image/icon.png"));
         setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
         setResizable(false);
 
@@ -83,11 +84,13 @@ public class SetupDialog extends JDialog implements RelocalizationListener {
 
         gbc.gridx = 0;
         gbc.gridy = 0;
+        gbc.insets = UIConstants.LABEL_INSETS;
         gbc.anchor = GridBagConstraints.BASELINE_TRAILING;
         languageLabel = new JLabel(GetText.tr("Language") + ": ");
         middle.add(languageLabel, gbc);
 
         gbc.gridx++;
+        gbc.insets = UIConstants.FIELD_INSETS;
         gbc.anchor = GridBagConstraints.BASELINE_LEADING;
         language = new JComboBox<>(Language.locales.stream().map(Locale::getDisplayName).toArray(String[]::new));
         language.setSelectedItem(Language.selected);
@@ -100,15 +103,17 @@ public class SetupDialog extends JDialog implements RelocalizationListener {
 
         gbc.gridx = 0;
         gbc.gridy++;
+        gbc.insets = UIConstants.LABEL_INSETS;
         gbc.anchor = GridBagConstraints.BASELINE_TRAILING;
         enableAnalyticsLabel = new JLabelWithHover(GetText.tr("Enable Anonymous Analytics") + "? ",
-                Utils.getIconImage("/assets/image/Help.png"),
+                Utils.getIconImage(App.THEME.getIconPath("question")),
                 "<html>" + Utils.splitMultilinedString(GetText.tr(
                         "The Launcher sends back anonymous analytics to Google Analytics in order to track what people do and don't use in the launcher. This helps determine what new features we implement in the future. All analytics are anonymous and contain no user/instance information in it at all. If you don't want to send anonymous analytics, you can disable this option."),
                         80, "<br/>") + "</html>");
         middle.add(enableAnalyticsLabel, gbc);
 
         gbc.gridx++;
+        gbc.insets = UIConstants.FIELD_INSETS;
         gbc.anchor = GridBagConstraints.BASELINE_LEADING;
         enableAnalytics = new JCheckBox();
         enableAnalytics.setSelected(!App.disableAnalytics);

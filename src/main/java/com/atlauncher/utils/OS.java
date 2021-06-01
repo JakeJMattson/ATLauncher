@@ -47,6 +47,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
+import com.atlauncher.App;
 import com.atlauncher.FileSystem;
 import com.atlauncher.Update;
 import com.atlauncher.constants.Constants;
@@ -536,6 +537,9 @@ public enum OS {
             arguments.add(path);
         }
 
+        // pass in all the original arguments
+        arguments.addAll(Arrays.asList(App.PASSED_ARGS));
+
         if (args != null) {
             arguments.addAll(args);
         }
@@ -577,5 +581,36 @@ public enum OS {
         StringSelection text = new StringSelection(data);
         Clipboard clipboard = Toolkit.getDefaultToolkit().getSystemClipboard();
         clipboard.setContents(text, null);
+    }
+
+    public static Object getUserAgentString() {
+        String name = "";
+        String arch = "";
+
+        switch (getOS()) {
+            case WINDOWS: {
+                name = "Windows NT " + getVersion();
+
+                if (OS.is64Bit()) {
+                    arch = "; Win64; x64";
+                }
+                break;
+            }
+            case OSX: {
+                // M1 machines still show Intel
+                name = String.format("Macintosh; Intel %s %s", getName(), getVersion().replaceAll(".", "_"));
+                break;
+            }
+            case LINUX: {
+                name = String.format("%s; Linux", getName());
+
+                if (OS.is64Bit()) {
+                    arch = "x86_64";
+                }
+                break;
+            }
+        }
+
+        return String.format("%s%s", name, arch);
     }
 }

@@ -49,6 +49,7 @@ import com.atlauncher.Gsons;
 import com.atlauncher.builders.HTMLBuilder;
 import com.atlauncher.constants.Constants;
 import com.atlauncher.data.APIResponse;
+import com.atlauncher.data.BackupMode;
 import com.atlauncher.data.Instance;
 import com.atlauncher.evnt.listener.RelocalizationListener;
 import com.atlauncher.evnt.manager.RelocalizationManager;
@@ -87,7 +88,6 @@ public class InstanceCard extends CollapsiblePanel implements RelocalizationList
     private final JButton reinstallButton = new JButton(GetText.tr("Reinstall"));
     private final JButton updateButton = new JButton(GetText.tr("Update"));
     private final JButton renameButton = new JButton(GetText.tr("Rename"));
-    private final JButton backupButton = new JButton(GetText.tr("Backup"));
     private final JButton deleteButton = new JButton(GetText.tr("Delete"));
     private final JButton exportButton = new JButton(GetText.tr("Export"));
     private final JButton addButton = new JButton(GetText.tr("Add Mods"));
@@ -96,6 +96,12 @@ public class InstanceCard extends CollapsiblePanel implements RelocalizationList
     private final JButton openWebsite = new JButton(GetText.tr("Open Website"));
     private final JButton openButton = new JButton(GetText.tr("Open Folder"));
     private final JButton settingsButton = new JButton(GetText.tr("Settings"));
+
+    private final JPopupMenu backupPopupMenu = new JPopupMenu();
+    private final JMenuItem normalBackupMenuItem = new JMenuItem(GetText.tr("Normal Backup"));
+    private final JMenuItem normalPlusModsBackupMenuItem = new JMenuItem(GetText.tr("Normal + Mods Backup"));
+    private final JMenuItem fullBackupMenuItem = new JMenuItem(GetText.tr("Full Backup"));
+    private final DropDownButton backupButton = new DropDownButton(GetText.tr("Backup"), backupPopupMenu);
 
     private final JPopupMenu getHelpPopupMenu = new JPopupMenu();
     private final JMenuItem discordLinkMenuItem = new JMenuItem(GetText.tr("Discord"));
@@ -121,6 +127,17 @@ public class InstanceCard extends CollapsiblePanel implements RelocalizationList
         this.descArea.setWrapStyleWord(true);
         this.descArea.setEditable(false);
 
+        if (instance.canChangeDescription()) {
+            this.descArea.addMouseListener(new MouseAdapter(){
+                @Override
+                public void mouseClicked(MouseEvent e) {
+                    if (e.getClickCount() == 2) {
+                        showChangeDescriptionDialog();
+                    }
+                }
+            });
+        }
+
         JPanel top = new JPanel(new FlowLayout(FlowLayout.CENTER, 5, 2));
         JPanel bottom = new JPanel(new FlowLayout(FlowLayout.CENTER, 5, 2));
 
@@ -141,7 +158,7 @@ public class InstanceCard extends CollapsiblePanel implements RelocalizationList
         bottom.add(this.exportButton);
         bottom.add(this.getHelpButton);
 
-        setupLinksButtonPopupMenu();
+        setupButtonPopupMenus();
 
         // check it can be exported
         this.exportButton.setVisible(instance.canBeExported());
@@ -158,7 +175,7 @@ public class InstanceCard extends CollapsiblePanel implements RelocalizationList
             this.updateButton.setVisible(instance.isUpdatable());
         }
 
-        if (instance.isExternalPack()) {
+        if (instance.isExternalPack() || instance.launcher.vanillaInstance) {
             this.serversButton.setVisible(false);
         }
 
@@ -201,7 +218,7 @@ public class InstanceCard extends CollapsiblePanel implements RelocalizationList
         this.validatePlayable();
     }
 
-    private void setupLinksButtonPopupMenu() {
+    private void setupButtonPopupMenus() {
         if (instance.getPack() != null) {
             if (instance.getPack().discordInviteURL != null) {
                 discordLinkMenuItem.addActionListener(e -> OS.openWebBrowser(instance.getPack().discordInviteURL));
@@ -218,6 +235,15 @@ public class InstanceCard extends CollapsiblePanel implements RelocalizationList
                 getHelpPopupMenu.add(websiteLinkMenuItem);
             }
         }
+
+        normalBackupMenuItem.addActionListener(e -> instance.backup(BackupMode.NORMAL));
+        backupPopupMenu.add(normalBackupMenuItem);
+
+        normalPlusModsBackupMenuItem.addActionListener(e -> instance.backup(BackupMode.NORMAL_PLUS_MODS));
+        backupPopupMenu.add(normalPlusModsBackupMenuItem);
+
+        fullBackupMenuItem.addActionListener(e -> instance.backup(BackupMode.FULL));
+        backupPopupMenu.add(fullBackupMenuItem);
     }
 
     private void validatePlayable() {
@@ -316,22 +342,6 @@ public class InstanceCard extends CollapsiblePanel implements RelocalizationList
                     instance.getAnalyticsCategory());
             new RenameInstanceDialog(instance);
         });
-        this.backupButton.addActionListener(e -> {
-            if (Files.isDirectory(instance.getRoot().resolve("saves"))) {
-                int ret = DialogManager.yesNoDialog().setTitle(GetText.tr("Backing Up {0}", instance.launcher.name))
-                        .setContent(new HTMLBuilder().center().text(GetText.tr(
-                                "Backups saves all your worlds as well as some other files such as your configs and<br/>optionally your mods (you can enable/disable this in the Settings tab), so you can restore them later.<br/><br/>Once backed up you can find the zip file in the backups/ folder.<br/><br/>Do you want to backup this instance?"))
-                                .build())
-                        .setType(DialogManager.INFO).show();
-
-                if (ret == DialogManager.YES_OPTION) {
-                    instance.backup();
-                }
-            } else {
-                DialogManager.okDialog().setType(DialogManager.WARNING).setTitle(GetText.tr("No saves found"))
-                        .setContent(GetText.tr("No saves were found for this instance")).show();
-            }
-        });
         this.addButton.addActionListener(e -> {
             Analytics.sendEvent(instance.launcher.pack + " - " + instance.launcher.version, "AddMods",
                     instance.getAnalyticsCategory());
@@ -365,7 +375,7 @@ public class InstanceCard extends CollapsiblePanel implements RelocalizationList
                 Analytics.sendEvent(instance.launcher.pack + " - " + instance.launcher.version, "Delete",
                         instance.getAnalyticsCategory());
                 final ProgressDialog dialog = new ProgressDialog(GetText.tr("Deleting Instance"), 0,
-                        GetText.tr("Deleting Instance. Please wait..."), null);
+                        GetText.tr("Deleting Instance. Please wait..."), null, App.launcher.getParent());
                 dialog.addThread(new Thread(() -> {
                     InstanceManager.removeInstance(instance);
                     dialog.close();
@@ -442,12 +452,11 @@ public class InstanceCard extends CollapsiblePanel implements RelocalizationList
                     JMenuItem updateItem = new JMenuItem(GetText.tr("Update"));
                     rightClickMenu.add(updateItem);
 
-                    changeDescriptionItem.setVisible(
-                            instance.isExternalPack() || (instance.getPack() != null && instance.getPack().system));
+                    changeDescriptionItem.setVisible(instance.canChangeDescription());
 
-                    shareCodeItem.setVisible(
-                            (instance.getPack() != null && !instance.getPack().system) && !instance.isExternalPack()
-                                    && instance.launcher.mods.stream().anyMatch(mod -> mod.optional));
+                    shareCodeItem.setVisible((instance.getPack() != null && !instance.getPack().system)
+                            && !instance.isExternalPack() && !instance.launcher.vanillaInstance
+                            && instance.launcher.mods.stream().anyMatch(mod -> mod.optional));
 
                     updateItem.setVisible(instance.isUpdatable());
                     updateItem.setEnabled(instance.hasUpdate() && instance.launcher.isPlayable);
@@ -455,23 +464,7 @@ public class InstanceCard extends CollapsiblePanel implements RelocalizationList
                     rightClickMenu.show(image, e.getX(), e.getY());
 
                     changeDescriptionItem.addActionListener(e13 -> {
-                        JTextArea textArea = new JTextArea(instance.launcher.description);
-                        textArea.setColumns(30);
-                        textArea.setRows(10);
-                        textArea.setLineWrap(true);
-                        textArea.setWrapStyleWord(true);
-                        textArea.setSize(300, 150);
-
-                        int ret = JOptionPane.showConfirmDialog(App.launcher.getParent(), new JScrollPane(textArea),
-                                GetText.tr("Changing Description"), JOptionPane.OK_CANCEL_OPTION,
-                                JOptionPane.INFORMATION_MESSAGE);
-
-                        if (ret == 0) {
-                            instance.launcher.description = textArea.getText();
-                            instance.save();
-
-                            descArea.setText(textArea.getText());
-                        }
+                        showChangeDescriptionDialog();
                     });
 
                     changeImageItem.addActionListener(e13 -> {
@@ -511,7 +504,7 @@ public class InstanceCard extends CollapsiblePanel implements RelocalizationList
 
                             final String newName = clonedName;
                             final ProgressDialog dialog = new ProgressDialog(GetText.tr("Cloning Instance"), 0,
-                                    GetText.tr("Cloning Instance. Please wait..."), null);
+                                    GetText.tr("Cloning Instance. Please wait..."), null, App.launcher.getParent());
                             dialog.addThread(new Thread(() -> {
                                 InstanceManager.cloneInstance(instance, newName);
                                 dialog.close();
@@ -631,6 +624,25 @@ public class InstanceCard extends CollapsiblePanel implements RelocalizationList
         });
     }
 
+    private void showChangeDescriptionDialog() {
+        JTextArea textArea = new JTextArea(instance.launcher.description);
+        textArea.setColumns(30);
+        textArea.setRows(10);
+        textArea.setLineWrap(true);
+        textArea.setWrapStyleWord(true);
+        textArea.setSize(300, 150);
+
+        int ret = JOptionPane.showConfirmDialog(App.launcher.getParent(), new JScrollPane(textArea),
+                GetText.tr("Changing Description"), JOptionPane.OK_CANCEL_OPTION, JOptionPane.INFORMATION_MESSAGE);
+
+        if (ret == 0) {
+            instance.launcher.description = textArea.getText();
+            instance.save();
+
+            descArea.setText(textArea.getText());
+        }
+    }
+
     public Instance getInstance() {
         return instance;
     }
@@ -649,6 +661,11 @@ public class InstanceCard extends CollapsiblePanel implements RelocalizationList
         this.openWebsite.setText(GetText.tr("Open Website"));
         this.openButton.setText(GetText.tr("Open Folder"));
         this.settingsButton.setText(GetText.tr("Settings"));
+
+        this.normalBackupMenuItem.setText(GetText.tr("Normal Backup"));
+        this.normalPlusModsBackupMenuItem.setText(GetText.tr("Normal + Mods Backup"));
+        this.fullBackupMenuItem.setText(GetText.tr("Full Backup"));
+        this.backupButton.setText(GetText.tr("Backup"));
 
         this.discordLinkMenuItem.setText(GetText.tr("Discord"));
         this.supportLinkMenuItem.setText(GetText.tr("Support"));

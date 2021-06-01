@@ -63,8 +63,6 @@ public class Settings {
     public String theme = Constants.DEFAULT_THEME_CLASS;
     public String dateFormat = "dd/MM/yyyy";
     public int selectedTabOnStartup = 0;
-    public String defaultModPlatform = "CurseForge";
-    public AddModRestriction addModRestriction = AddModRestriction.STRICT;
     public boolean sortPacksAlphabetically = false;
     public boolean showPackNameAndVersion = true;
     public boolean keepLauncherOpen = true;
@@ -76,6 +74,12 @@ public class Settings {
     public boolean disableCustomFonts = false;
     public boolean useNativeFilePicker = OS.isMac();
 
+    // Mods
+    public ModPlatform defaultModPlatform = ModPlatform.CURSEFORGE;
+    public AddModRestriction addModRestriction = AddModRestriction.STRICT;
+    public boolean enableAddedModsByDefault = true;
+    public boolean dontCheckModsOnCurseForge = false;
+
     // Java/Minecraft
     public int initialMemory = 512;
     public int maximumMemory = 4096;
@@ -86,10 +90,13 @@ public class Settings {
     public String javaParameters = Constants.DEFAULT_JAVA_PARAMETERS;
     public boolean maximiseMinecraft = false;
     public boolean ignoreJavaOnInstanceLaunch = false;
+    public boolean useJavaProvidedByMinecraft = true;
 
     // Network
     public int concurrentConnections = 8;
     public int connectionTimeout = 30;
+    public boolean dontUseHttp2 = false;
+    public boolean dontValidateModpacksChDownloads = false;
     public boolean enableProxy = false;
     public String proxyHost = "";
     public int proxyPort = 8080;
@@ -108,8 +115,8 @@ public class Settings {
     public int serverCheckerWait = 5;
 
     // Backups
-    public boolean enableModsBackups = false;
     public boolean enableAutomaticBackupAfterLaunch = false;
+    public BackupMode backupMode = BackupMode.NORMAL;
 
     public void convert(Properties properties) {
         String importedDateFormat = properties.getProperty("dateformat");
@@ -268,11 +275,6 @@ public class Settings {
             enableOpenEyeReporting = Boolean.parseBoolean(importedEnableOpenEyeReporting);
         }
 
-        String importedEnableModsBackups = properties.getProperty("enablemodsbackups");
-        if (importedEnableModsBackups != null) {
-            enableModsBackups = Boolean.parseBoolean(importedEnableModsBackups);
-        }
-
         String importedServerCheckerWait = properties.getProperty("servercheckerwait");
         if (importedServerCheckerWait != null) {
             serverCheckerWait = Integer.parseInt(importedServerCheckerWait);
@@ -301,6 +303,8 @@ public class Settings {
     }
 
     public void validate() {
+        validateAnalyticsClientId();
+
         validateWindowSettings();
 
         validateDisableAddModRestrictions();
@@ -318,6 +322,16 @@ public class Settings {
         validateConcurrentConnections();
 
         validateDateFormat();
+    }
+
+    private void validateAnalyticsClientId() {
+        // people are sharing configs around with a static id or with null which means
+        // it's hard to see actual usage, so randomise if enabled
+        if (enableAnalytics && (analyticsClientId == null
+                || analyticsClientId.equalsIgnoreCase("30662333-d88f-4e21-8d77-95739af9bf78"))) {
+            analyticsClientId = UUID.randomUUID().toString();
+            save();
+        }
     }
 
     private void validateWindowSettings() {
@@ -356,8 +370,8 @@ public class Settings {
 
     private void validateDefaultModPlatform() {
         if (defaultModPlatform == null
-                || !(defaultModPlatform.equals("CurseForge") || defaultModPlatform.equals("Modrinth"))) {
-            defaultModPlatform = "CurseForge";
+                || !(defaultModPlatform == ModPlatform.CURSEFORGE || defaultModPlatform == ModPlatform.MODRINTH)) {
+            defaultModPlatform = ModPlatform.CURSEFORGE;
         }
     }
 

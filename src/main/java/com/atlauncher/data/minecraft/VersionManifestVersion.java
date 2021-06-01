@@ -19,11 +19,21 @@ package com.atlauncher.data.minecraft;
 
 import com.atlauncher.annot.Json;
 
+import org.joda.time.DateTime;
+import org.joda.time.format.ISODateTimeFormat;
+
 @Json
 public class VersionManifestVersion {
     public String id;
-    public String type;
+    public VersionManifestVersionType type;
     public String url;
     public String time;
     public String releaseTime;
+
+    public boolean hasServer() {
+        DateTime parsedReleaseTime = ISODateTimeFormat.dateTimeParser().parseDateTime(releaseTime);
+
+        // check if the release is after 1.2.5 release time
+        return parsedReleaseTime.isAfter(ISODateTimeFormat.dateTimeParser().parseDateTime("2012-03-28T22:00:00+00:00"));
+    }
 }

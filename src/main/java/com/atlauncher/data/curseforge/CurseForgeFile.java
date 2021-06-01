@@ -17,10 +17,17 @@
  */
 package com.atlauncher.data.curseforge;
 
+import java.util.Comparator;
 import java.util.List;
+import java.util.Optional;
 
 import com.atlauncher.data.json.DownloadType;
 import com.atlauncher.data.json.Mod;
+import com.atlauncher.data.minecraft.VersionManifestVersion;
+import com.atlauncher.exceptions.InvalidMinecraftVersion;
+import com.atlauncher.managers.MinecraftManager;
+
+import org.joda.time.format.ISODateTimeFormat;
 
 public class CurseForgeFile {
     public int id;
@@ -68,5 +75,30 @@ public class CurseForgeFile {
         mod.curseForgeFile = this;
 
         return mod;
+    }
+
+    public String getGameVersion() {
+        // only 1 version, so grab that
+        if (gameVersion.size() == 1) {
+            return gameVersion.get(0);
+        }
+
+        // if more than 1, we need to filter out non Minecraft versions (loaders for
+        // instance) and then order them by Minecraft versions release date to make sure
+        // we use the newest (SkyFactory 4 lists 3 Minecraft versions for some reason)
+        Optional<String> minecraftVersion = gameVersion.stream().filter(gv -> MinecraftManager.isMinecraftVersion(gv))
+                .map(gv -> {
+                    try {
+                        return MinecraftManager.getMinecraftVersion(gv);
+                    } catch (InvalidMinecraftVersion e) {
+                        // this should never happen because of the filter
+                        return null;
+                    }
+                }).filter(gv -> gv != null).sorted(Comparator.comparingLong((VersionManifestVersion mv) -> {
+                    return ISODateTimeFormat.dateTimeParser().parseDateTime(mv.releaseTime).getMillis() / 1000;
+                }).reversed()).map(mv -> mv.id).findFirst();
+
+        // worse case if nothing comes back, just grab the first item
+        return minecraftVersion.orElseGet(() -> gameVersion.get(0));
     }
 }

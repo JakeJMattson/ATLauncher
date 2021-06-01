@@ -40,6 +40,7 @@ import com.atlauncher.utils.Utils;
 public class Pack {
     public int id;
     public int externalId;
+    public boolean vanillaInstance = false;
     public int position;
     public String name;
     public PackType type;
@@ -87,7 +88,7 @@ public class Pack {
     public ImageIcon getImage() {
         File imageFile = FileSystem.IMAGES.resolve(getSafeName().toLowerCase() + ".png").toFile();
         if (!imageFile.exists()) {
-            return Utils.getIconImage("/assets/image/DefaultPackImage.png");
+            return Utils.getIconImage("/assets/image/default-image.png");
         }
         return Utils.getIconImage(imageFile);
     }

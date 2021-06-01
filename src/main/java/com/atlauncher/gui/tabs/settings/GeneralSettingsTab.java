@@ -36,7 +36,6 @@ import com.atlauncher.App;
 import com.atlauncher.builders.HTMLBuilder;
 import com.atlauncher.constants.Constants;
 import com.atlauncher.constants.UIConstants;
-import com.atlauncher.data.AddModRestriction;
 import com.atlauncher.data.Language;
 import com.atlauncher.gui.components.JLabelWithHover;
 import com.atlauncher.utils.ComboItem;
@@ -51,8 +50,6 @@ public class GeneralSettingsTab extends AbstractSettingsTab {
     private final JComboBox<ComboItem<String>> theme;
     private final JComboBox<ComboItem<String>> dateFormat;
     private final JComboBox<ComboItem<Integer>> selectedTabOnStartup;
-    private final JComboBox<ComboItem<String>> defaultModPlatform;
-    private final JComboBox<ComboItem<AddModRestriction>> addModRestriction;
     private final JCheckBox sortPacksAlphabetically;
     private final JCheckBox showPackNameAndVersion;
     private final JCheckBox keepLauncherOpen;
@@ -121,6 +118,7 @@ public class GeneralSettingsTab extends AbstractSettingsTab {
         theme.addItem(new ComboItem<>("com.atlauncher.themes.ArcOrange", "Arc Orange"));
         theme.addItem(new ComboItem<>("com.atlauncher.themes.CyanLight", "Cyan Light"));
         theme.addItem(new ComboItem<>("com.atlauncher.themes.HighTechDarkness", "High Tech Darkness"));
+        theme.addItem(new ComboItem<>("com.atlauncher.themes.OneDark", "One Dark"));
 
         for (int i = 0; i < theme.getItemCount(); i++) {
             ComboItem<String> item = theme.getItemAt(i);
@@ -201,70 +199,6 @@ public class GeneralSettingsTab extends AbstractSettingsTab {
         }
 
         add(selectedTabOnStartup, gbc);
-
-        // Default mod platform
-
-        gbc.gridx = 0;
-        gbc.gridy++;
-        gbc.insets = UIConstants.LABEL_INSETS;
-        gbc.anchor = GridBagConstraints.BASELINE_TRAILING;
-
-        JLabelWithHover defaultModPlatformLabel = new JLabelWithHover(GetText.tr("Default Mod Platform") + ":",
-                HELP_ICON, GetText.tr("The default mod platform to use when adding mods to instances."));
-
-        add(defaultModPlatformLabel, gbc);
-
-        gbc.gridx++;
-        gbc.insets = UIConstants.FIELD_INSETS;
-        gbc.anchor = GridBagConstraints.BASELINE_LEADING;
-        defaultModPlatform = new JComboBox<>();
-        defaultModPlatform.addItem(new ComboItem<>("CurseForge", "CurseForge"));
-        defaultModPlatform.addItem(new ComboItem<>("Modrinth", "Modrinth"));
-
-        for (int i = 0; i < defaultModPlatform.getItemCount(); i++) {
-            ComboItem<String> item = defaultModPlatform.getItemAt(i);
-
-            if (item.getValue().equals(App.settings.defaultModPlatform)) {
-                defaultModPlatform.setSelectedIndex(i);
-                break;
-            }
-        }
-
-        add(defaultModPlatform, gbc);
-
-        // Add Mod Restrictions
-
-        gbc.gridx = 0;
-        gbc.gridy++;
-        gbc.insets = UIConstants.LABEL_INSETS;
-        gbc.anchor = GridBagConstraints.BASELINE_TRAILING;
-
-        JLabelWithHover addModRestrictionsLabel = new JLabelWithHover(GetText.tr("Add Mod Restrictions") + ":",
-                HELP_ICON, GetText.tr("What restrictions should be in place when adding mods from a mod platform."));
-
-        add(addModRestrictionsLabel, gbc);
-
-        gbc.gridx++;
-        gbc.insets = UIConstants.FIELD_INSETS;
-        gbc.anchor = GridBagConstraints.BASELINE_LEADING;
-        addModRestriction = new JComboBox<>();
-        addModRestriction.addItem(
-                new ComboItem<>(AddModRestriction.STRICT, GetText.tr("Only show mods for current Minecraft version")));
-        addModRestriction.addItem(new ComboItem<>(AddModRestriction.LAX,
-                GetText.tr("Show mods for the current major Minecraft version (eg: 1.16.x)")));
-        addModRestriction
-                .addItem(new ComboItem<>(AddModRestriction.NONE, GetText.tr("Show mods for all Minecraft versions")));
-
-        for (int i = 0; i < addModRestriction.getItemCount(); i++) {
-            ComboItem<AddModRestriction> item = addModRestriction.getItemAt(i);
-
-            if (item.getValue() == App.settings.addModRestriction) {
-                addModRestriction.setSelectedIndex(i);
-                break;
-            }
-        }
-
-        add(addModRestriction, gbc);
 
         // Sort Packs Alphabetically
 
@@ -507,8 +441,6 @@ public class GeneralSettingsTab extends AbstractSettingsTab {
         App.settings.theme = ((ComboItem<String>) theme.getSelectedItem()).getValue();
         App.settings.dateFormat = ((ComboItem<String>) dateFormat.getSelectedItem()).getValue();
         App.settings.selectedTabOnStartup = ((ComboItem<Integer>) selectedTabOnStartup.getSelectedItem()).getValue();
-        App.settings.defaultModPlatform = ((ComboItem<String>) defaultModPlatform.getSelectedItem()).getValue();
-        App.settings.addModRestriction = ((ComboItem<AddModRestriction>) addModRestriction.getSelectedItem()).getValue();
         App.settings.sortPacksAlphabetically = sortPacksAlphabetically.isSelected();
         App.settings.showPackNameAndVersion = showPackNameAndVersion.isSelected();
         App.settings.keepLauncherOpen = keepLauncherOpen.isSelected();

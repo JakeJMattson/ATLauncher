@@ -61,6 +61,7 @@ public final class Download {
     private String hash;
     private Long fingerprint = null;
     public long size = -1L;
+    private boolean executable = false;
     public InstanceInstaller instanceInstaller;
     private OkHttpClient httpClient = Network.CLIENT;
     private RequestBody post = null;
@@ -153,21 +154,25 @@ public final class Download {
         return asClassWithThrow(tClass, Gsons.MINECRAFT);
     }
 
-    public <T> T asType(Type tClass, Gson gson) {
-        try {
-            if (this.to != null) {
-                if (this.needToDownload()) {
-                    this.downloadFile();
-                }
-
-                try (InputStreamReader isr = new InputStreamReader(Files.newInputStream(this.to))) {
-                    return gson.fromJson(isr, tClass);
-                }
+    public <T> T asTypeWithThrow(Type tClass, Gson gson) throws IOException {
+        if (this.to != null) {
+            if (this.needToDownload()) {
+                this.downloadFile();
             }
 
-            this.execute();
+            try (InputStreamReader isr = new InputStreamReader(Files.newInputStream(this.to))) {
+                return gson.fromJson(isr, tClass);
+            }
+        }
 
-            return gson.fromJson(this.response.body().charStream(), tClass);
+        this.execute();
+
+        return gson.fromJson(this.response.body().charStream(), tClass);
+    }
+
+    public <T> T asType(Type tClass, Gson gson) {
+        try {
+            return asTypeWithThrow(tClass, gson);
         } catch (IOException e) {
             LogManager.logStackTrace(e);
 
@@ -182,6 +187,10 @@ public final class Download {
 
     public <T> T asType(Type tClass) {
         return asType(tClass, Gsons.MINECRAFT);
+    }
+
+    public <T> T asTypeWithThrow(Type tClass) throws IOException {
+        return asTypeWithThrow(tClass, Gsons.MINECRAFT);
     }
 
     public Download downloadTo(Path to) {
@@ -222,6 +231,12 @@ public final class Download {
 
     public Download size(long size) {
         this.size = size;
+
+        return this;
+    }
+
+    public Download executable(boolean executable) {
+        this.executable = executable;
 
         return this;
     }
@@ -662,6 +677,10 @@ public final class Download {
             FileUtils.createDirectory(this.unzipTo);
 
             ZipUtil.unpack(this.to.toFile(), this.unzipTo.toFile());
+        }
+
+        if (Files.exists(this.to) && this.executable) {
+            this.to.toFile().setExecutable(this.executable);
         }
     }
 

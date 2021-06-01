@@ -68,7 +68,7 @@ public class PackManager {
      *
      * @return The Packs available in the Launcher sorted alphabetically
      */
-    public static List<Pack> getPacksSortedAlphabetically(boolean isFeatured, boolean isSystem) {
+    public static List<Pack> getPacksSortedAlphabetically(boolean isFeatured) {
         List<Pack> packs = new LinkedList<>();
 
         for (Pack pack : Data.PACKS) {
@@ -78,14 +78,8 @@ public class PackManager {
                 }
             }
 
-            if (isSystem) {
-                if (pack.isSystem()) {
-                    packs.add(pack);
-                }
-            } else {
-                if (!pack.isSystem()) {
-                    packs.add(pack);
-                }
+            if (!pack.isSystem()) {
+                packs.add(pack);
             }
         }
 
@@ -98,7 +92,7 @@ public class PackManager {
      *
      * @return The Packs available in the Launcher sorted by position
      */
-    public static List<Pack> getPacksSortedPositionally(boolean isFeatured, boolean isSystem) {
+    public static List<Pack> getPacksSortedPositionally(boolean isFeatured) {
         List<Pack> packs = new LinkedList<>();
 
         for (Pack pack : Data.PACKS) {
@@ -108,14 +102,8 @@ public class PackManager {
                 }
             }
 
-            if (isSystem) {
-                if (pack.isSystem()) {
-                    packs.add(pack);
-                }
-            } else {
-                if (!pack.isSystem()) {
-                    packs.add(pack);
-                }
+            if (!pack.isSystem()) {
+                packs.add(pack);
             }
         }
 
@@ -135,7 +123,6 @@ public class PackManager {
                 AccountManager.getSelectedAccount().collapsedPacks.remove(pack.getName());
             }
             AccountManager.saveAccounts();
-            App.launcher.reloadVanillaPacksPanel();
             App.launcher.reloadFeaturedPacksPanel();
             App.launcher.reloadPacksPanel();
         }
@@ -244,7 +231,6 @@ public class PackManager {
                     }
                     App.settings.addedPacks.add(packCode);
                     App.settings.save();
-                    App.launcher.refreshVanillaPacksPanel();
                     App.launcher.refreshFeaturedPacksPanel();
                     App.launcher.refreshPacksPanel();
                     return true;
@@ -259,7 +245,6 @@ public class PackManager {
             if (Hashing.md5(code).equals(Hashing.HashCode.fromString(packCode))) {
                 App.settings.addedPacks.remove(packCode);
                 App.settings.save();
-                App.launcher.refreshVanillaPacksPanel();
                 App.launcher.refreshFeaturedPacksPanel();
                 App.launcher.refreshPacksPanel();
             }
@@ -295,7 +280,8 @@ public class PackManager {
         PerformanceManager.start();
         File[] files = FileSystem.IMAGES.toFile().listFiles();
 
-        Set<String> packImageFilenames = Data.PACKS.stream().map(p -> p.getSafeName().toLowerCase() + ".png").collect(Collectors.toSet());
+        Set<String> packImageFilenames = Data.PACKS.stream().map(p -> p.getSafeName().toLowerCase() + ".png")
+                .collect(Collectors.toSet());
         packImageFilenames.add("defaultimage.png");
 
         if (files != null) {

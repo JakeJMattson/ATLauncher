@@ -104,9 +104,10 @@ public class ModrinthVersionSelectorDialog extends JDialog {
         setTitle(GetText.tr("Installing {0}", mod.title));
 
         setSize(550, 200);
+        setMinimumSize(new Dimension(550, 200));
         setLocationRelativeTo(App.launcher.getParent());
         setLayout(new BorderLayout());
-        setResizable(false);
+        setResizable(true);
         this.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
 
         addButton = new JButton(GetText.tr("Add"));
@@ -147,7 +148,7 @@ public class ModrinthVersionSelectorDialog extends JDialog {
 
             ProgressDialog progressDialog = new ProgressDialog<>(
                     // #. {0} is the name of the mod we're installing
-                    GetText.tr("Installing {0}", version.name), true);
+                    GetText.tr("Installing {0}", version.name), true, this);
             progressDialog.addThread(new Thread(() -> {
                 Analytics.sendEvent(mod.title + " - " + version.name, "AddFile", "ModrinthMod");
                 instance.addFileFromModrinth(mod, version, progressDialog);
@@ -155,6 +156,7 @@ public class ModrinthVersionSelectorDialog extends JDialog {
                 progressDialog.close();
             }));
             progressDialog.start();
+            dispose();
         });
 
         JButton cancel = new JButton(GetText.tr("Cancel"));
@@ -192,7 +194,7 @@ public class ModrinthVersionSelectorDialog extends JDialog {
             } else if (App.settings.addModRestriction == AddModRestriction.LAX) {
                 try {
                     List<String> minecraftVersionsToSearch = MinecraftManager
-                            .getMajorMinecraftVersions(this.instance.id).stream().map(mv -> mv.version)
+                            .getMajorMinecraftVersions(this.instance.id).stream().map(mv -> mv.id)
                             .collect(Collectors.toList());
 
                     modrinthVersionsStream = modrinthVersionsStream.filter(

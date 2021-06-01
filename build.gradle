@@ -20,6 +20,7 @@ plugins {
     id 'net.minecrell.licenser' version '0.4.1'
     id 'com.github.ben-manes.versions' version '0.36.0'
     id 'com.adarshr.test-logger' version '2.1.1'
+    id 'de.undercouch.download' version '4.1.1'
 }
 
 apply plugin: 'org.mini2Dx.gettext'
@@ -63,6 +64,7 @@ dependencies {
     implementation 'com.github.pack200:pack200:d5fd0807d6'
     implementation 'com.github.oshi:oshi-core:5.3.6'
     implementation 'net.freeutils:jlhttp:2.5'
+    implementation 'joda-time:joda-time:2.10.10'
 
     testImplementation 'junit:junit:4.13.1'
     testImplementation 'org.junit.jupiter:junit-jupiter-api:5.7.0'
@@ -88,7 +90,7 @@ test {
 jar {
     manifest {
         attributes(
-                'SplashScreen-Image': '/assets/image/SplashScreen.png',
+                'SplashScreen-Image': '/assets/image/splash-screen.png',
                 'Implementation-Title': project.name,
                 'Implementation-Version': version,
                 'Implementation-Vender': 'ATLauncher',
@@ -143,7 +145,7 @@ macAppBundle {
     appStyle = 'universalJavaApplicationStub'
     runtimeConfigurationName = 'shadow'
     jarTask = 'shadowJar'
-    icon = 'src/main/resources/assets/image/Icon.icns'
+    icon = 'src/main/resources/assets/image/icon.icns'
     javaProperties.put('user.dir', '$APP_ROOT/Contents/Java')
     javaProperties.put('apple.laf.useScreenMenuBar', 'true')
     javaExtras.put("-Djna.nosys", "true")
@@ -168,7 +170,7 @@ launch4j {
     outfile = "ATLauncher-${project.version}.exe"
     jreMinVersion = "${project.targetCompatibility.toString()}"
     mainClassName = 'com.atlauncher.App'
-    icon = "${projectDir}/src/main/resources/assets/image/Icon.ico"
+    icon = "${projectDir}/src/main/resources/assets/image/icon.ico"
     initialHeapPercent = 5
     maxHeapPercent = 100
     version = "${project.version}"
@@ -198,6 +200,13 @@ task copyArtifacts(type: Copy) {
     into "${projectDir}/dist"
 }
 
+task downloadNewerUniversalJavaApplicationStub(type: Download) {
+    description 'Downloads newer universalJavaApplicationStub'
+    src 'https://raw.githubusercontent.com/tofi86/universalJavaApplicationStub/475d0cfb5f76896a7ab367c64bb4f628a46f0366/src/universalJavaApplicationStub'
+    dest file("$buildDir/macApp/${project.name}.app/Contents/MacOS/universalJavaApplicationStub")
+    overwrite true
+}
+
 task createMacApp(type: Zip) {
     dependsOn createApp, shadowJar
     from("$buildDir/macApp") {
@@ -222,3 +231,4 @@ clean.doFirst {
 build.finalizedBy copyArtifacts
 shadowJar.dependsOn jar
 build.dependsOn createExe, createMacApp
+createApp.finalizedBy downloadNewerUniversalJavaApplicationStub
