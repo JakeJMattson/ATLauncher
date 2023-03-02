@@ -17,25 +17,6 @@
  */
 package com.atlauncher;
 
-import java.awt.Dialog.ModalityType;
-import java.awt.FlowLayout;
-import java.awt.Window;
-import java.io.File;
-import java.io.FileNotFoundException;
-import java.io.FileReader;
-import java.io.IOException;
-import java.net.URLDecoder;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.stream.Collectors;
-
-import javax.swing.JDialog;
-import javax.swing.JFrame;
-import javax.swing.JLabel;
-
-import org.mini2Dx.gettext.GetText;
-
 import com.atlauncher.builders.HTMLBuilder;
 import com.atlauncher.constants.Constants;
 import com.atlauncher.data.DownloadableFile;
@@ -67,9 +48,25 @@ import com.atlauncher.utils.OS;
 import com.google.gson.JsonIOException;
 import com.google.gson.JsonSyntaxException;
 import com.google.gson.reflect.TypeToken;
-
 import net.arikia.dev.drpc.DiscordRPC;
 import okhttp3.OkHttpClient;
+import org.mini2Dx.gettext.GetText;
+
+import javax.swing.JDialog;
+import javax.swing.JFrame;
+import javax.swing.JLabel;
+import java.awt.Dialog.ModalityType;
+import java.awt.FlowLayout;
+import java.awt.Window;
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileReader;
+import java.io.IOException;
+import java.net.URLDecoder;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.stream.Collectors;
 
 public class Launcher {
     // Holding update data
@@ -154,7 +151,7 @@ public class Launcher {
 
     public void downloadUpdate() {
         try {
-            File thisFile = new File(Update.class.getProtectionDomain().getCodeSource().getLocation().getPath());
+            File thisFile = new File(UpdateKt.class.getProtectionDomain().getCodeSource().getLocation().getPath());
             String path = thisFile.getCanonicalPath();
             path = URLDecoder.decode(path, "UTF-8");
             String toget;
