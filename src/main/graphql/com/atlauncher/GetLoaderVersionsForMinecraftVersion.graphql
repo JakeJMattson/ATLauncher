@@ -19,6 +19,18 @@ query GetLoaderVersionsForMinecraftVersion($minecraftVersion: String!) {
         legacyfabric {
             version
         }
+        neoforge {
+            version
+            rawVersion
+            recommended
+        }
+        paper {
+            build
+            promoted
+        }
+        purpur {
+            build
+        }
         quilt {
             version
         }

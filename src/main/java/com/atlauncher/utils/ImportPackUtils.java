@@ -18,18 +18,23 @@
 package com.atlauncher.utils;
 
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileReader;
 import java.io.IOException;
-import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.Properties;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import org.mini2Dx.gettext.GetText;
+
+import com.atlauncher.App;
 import com.atlauncher.FileSystem;
 import com.atlauncher.Gsons;
+import com.atlauncher.builders.HTMLBuilder;
 import com.atlauncher.data.curseforge.CurseForgeFile;
 import com.atlauncher.data.curseforge.CurseForgeFileHash;
 import com.atlauncher.data.curseforge.CurseForgeProject;
@@ -40,8 +45,10 @@ import com.atlauncher.data.modrinth.pack.ModrinthModpackManifest;
 import com.atlauncher.data.multimc.MultiMCInstanceConfig;
 import com.atlauncher.data.multimc.MultiMCManifest;
 import com.atlauncher.gui.dialogs.InstanceInstallerDialog;
+import com.atlauncher.managers.DialogManager;
 import com.atlauncher.managers.LogManager;
 import com.atlauncher.network.Download;
+import com.google.gson.JsonSyntaxException;
 
 public class ImportPackUtils {
     public static boolean loadFromUrl(String url) {
@@ -81,53 +88,132 @@ public class ImportPackUtils {
         }
 
         String packSlug = matcher.group(1);
-        Integer projectId = null;
         Integer fileId = null;
 
         LogManager.debug(matcher.groupCount() + "");
 
         if (matcher.groupCount() == 2 && matcher.group(2) != null) {
-            fileId = Integer.parseInt(matcher.group(2));
+            fileId = Integer.valueOf(matcher.group(2));
         }
 
         LogManager.debug("Found pack with slug " + packSlug + " and file id of " + fileId);
 
         CurseForgeProject project = CurseForgeApi.getModPackBySlug(packSlug);
-        projectId = project.id;
-        fileId = project.mainFileId;
-
-        if (projectId == null || fileId == null) {
+        if (project == null) {
             LogManager.error(
-                    "Cannot install as the id's couldn't be found. Try using a specific files install link instead.");
+                    "Cannot install as the project with slug " + packSlug + " was not found.");
             return false;
         }
+
+        Integer projectId = project.id;
+        fileId = project.mainFileId;
 
         LogManager.debug("Resolved to project id " + projectId + " and file id of " + fileId);
 
         CurseForgeFile curseFile = CurseForgeApi.getFileForProject(projectId, fileId);
         Path tempZip = FileSystem.TEMP.resolve(curseFile.fileName);
 
-        try {
-            Download download = new Download().setUrl(curseFile.downloadUrl).downloadTo(tempZip)
-                    .size(curseFile.fileLength);
+        if (curseFile.downloadUrl == null) {
+            if (!App.settings.seenCurseForgeProjectDistributionDialog) {
+                App.settings.seenCurseForgeProjectDistributionDialog = true;
+                App.settings.save();
 
-            Optional<CurseForgeFileHash> md5Hash = curseFile.hashes.stream().filter(h -> h.isMd5())
-                    .findFirst();
-            Optional<CurseForgeFileHash> sha1Hash = curseFile.hashes.stream().filter(h -> h.isSha1())
-                    .findFirst();
-
-            if (md5Hash.isPresent()) {
-                download = download.hash(md5Hash.get().value);
-            } else if (sha1Hash.isPresent()) {
-                download = download.hash(sha1Hash.get().value);
-            } else {
-                download = download.fingerprint(curseFile.packageFingerprint);
+                DialogManager.okDialog().setType(DialogManager.WARNING)
+                        .setTitle(GetText.tr("Mod Not Available"))
+                        .setContent(new HTMLBuilder().center().text(GetText.tr(
+                                "We were unable to download this modpack.<br/>This is likely due to the author of the modpack disabling third party clients from downloading it.<br/><br/>You'll be prompted shortly to download the modpack manually through your browser to your downloads folder.<br/>Once you've downloaded the file that was opened in your browser to your downloads folder, we can continue with installing the modpack.<br/><br/>This process is unfortunate, but we don't have any choice in this matter and has to be done this way."))
+                                .build())
+                        .show();
             }
 
-            download.downloadFile();
-        } catch (IOException e) {
-            LogManager.error("Failed to download modpack file from CurseForge");
-            return false;
+            String filename = curseFile.fileName;
+            String filename2 = curseFile.fileName.replace(" ", "+");
+
+            File fileLocation = FileSystem.DOWNLOADS.resolve(filename).toFile();
+            File fileLocation2 = FileSystem.DOWNLOADS.resolve(filename2).toFile();
+            if (!fileLocation.exists() && !fileLocation2.exists()) {
+                File downloadsFolderFile = new File(FileSystem.getUserDownloadsPath().toFile(),
+                        filename);
+                File downloadsFolderFile2 = new File(FileSystem.getUserDownloadsPath().toFile(),
+                        filename2);
+                if (downloadsFolderFile.exists()) {
+                    Utils.moveFile(downloadsFolderFile, fileLocation, true);
+                } else if (downloadsFolderFile2.exists()) {
+                    Utils.moveFile(downloadsFolderFile2, fileLocation, true);
+                }
+
+                while (!fileLocation.exists() && !fileLocation2.exists()) {
+                    int retValue = 1;
+                    do {
+                        if (retValue == 1) {
+                            OS.openWebBrowser(project.getBrowserDownloadUrl(curseFile));
+                        }
+
+                        retValue = DialogManager.optionDialog()
+                                .setTitle(GetText.tr("Downloading") + " "
+                                        + filename)
+                                .setContent(new HTMLBuilder().center().text(GetText.tr(
+                                        "Browser opened to download file {0}",
+                                        filename)
+                                        + "<br/><br/>" + GetText.tr("Please save this file to the following location")
+                                        + "<br/><br/>"
+                                        + (OS.isUsingMacApp()
+                                                ? FileSystem.getUserDownloadsPath().toFile().getAbsolutePath()
+                                                : FileSystem.DOWNLOADS.toAbsolutePath().toString()
+                                                        + " or<br/>"
+                                                        + FileSystem.getUserDownloadsPath().toFile()))
+                                        .build())
+                                .addOption(GetText.tr("Open Folder"), true)
+                                .addOption(GetText.tr("I've Downloaded This File")).setType(DialogManager.INFO)
+                                .showWithFileMonitoring(curseFile.fileLength, 1, fileLocation, fileLocation2,
+                                        downloadsFolderFile, downloadsFolderFile2);
+
+                        if (retValue == DialogManager.CLOSED_OPTION) {
+                            return false;
+                        } else if (retValue == 0) {
+                            OS.openFileExplorer(FileSystem.DOWNLOADS);
+                        }
+                    } while (retValue != 1);
+
+                    if (!fileLocation.exists() && !fileLocation2.exists()) {
+                        // Check users downloads folder to see if it's there
+                        if (downloadsFolderFile.exists()) {
+                            Utils.moveFile(downloadsFolderFile, fileLocation, true);
+                        } else if (downloadsFolderFile2.exists()) {
+                            Utils.moveFile(downloadsFolderFile2, fileLocation, true);
+                        }
+                    }
+                }
+            }
+
+            if (fileLocation.exists()) {
+                FileUtils.moveFile(fileLocation.toPath(), tempZip, true);
+            } else if (fileLocation2.exists()) {
+                FileUtils.moveFile(fileLocation2.toPath(), tempZip, true);
+            }
+        } else {
+            try {
+                Download download = new Download().setUrl(curseFile.downloadUrl).downloadTo(tempZip)
+                        .size(curseFile.fileLength);
+
+                Optional<CurseForgeFileHash> md5Hash = curseFile.hashes.stream().filter(CurseForgeFileHash::isMd5)
+                        .findFirst();
+                Optional<CurseForgeFileHash> sha1Hash = curseFile.hashes.stream().filter(CurseForgeFileHash::isSha1)
+                        .findFirst();
+
+                if (md5Hash.isPresent()) {
+                    download = download.hash(md5Hash.get().value);
+                } else if (sha1Hash.isPresent()) {
+                    download = download.hash(sha1Hash.get().value);
+                } else {
+                    download = download.fingerprint(curseFile.packageFingerprint);
+                }
+
+                download.downloadFile();
+            } catch (IOException e) {
+                LogManager.error("Failed to download modpack file from CurseForge");
+                return false;
+            }
         }
 
         return loadCurseForgeFormat(tempZip.toFile(), projectId, fileId);
@@ -160,7 +246,8 @@ public class ImportPackUtils {
                 return false;
             }
 
-            new InstanceInstallerDialog(modrinthProject);
+            InstanceInstallerDialog instanceInstallerDialog = new InstanceInstallerDialog(modrinthProject);
+            instanceInstallerDialog.setVisible(true);
         } catch (Exception e) {
             LogManager.logStackTrace("Failed to install Modrinth pack from URL", e);
             return false;
@@ -171,7 +258,8 @@ public class ImportPackUtils {
 
     public static boolean loadFromFile(File file) {
         try {
-            Path tmpDir = FileSystem.TEMP.resolve("multimcimport" + file.getName().toString().toLowerCase());
+            Path tmpDir = FileSystem.TEMP
+                    .resolve("multimcimport" + file.getName().toLowerCase(Locale.ENGLISH));
 
             ArchiveUtils.extract(file.toPath(), tmpDir);
 
@@ -185,7 +273,7 @@ public class ImportPackUtils {
             }
 
             FileUtils.deleteDirectory(tmpDir);
-            
+
             if (ArchiveUtils.archiveContainsFile(file.toPath(), "manifest.json")) {
                 return loadCurseForgeFormat(file, null, null);
             }
@@ -208,10 +296,11 @@ public class ImportPackUtils {
             return false;
         }
 
-        Path tmpDir = FileSystem.TEMP.resolve("curseforgeimport" + file.getName().toString().toLowerCase());
+        Path tmpDir = FileSystem.TEMP
+                .resolve("curseforgeimport" + file.getName().toLowerCase(Locale.ENGLISH));
 
         try {
-            CurseForgeManifest manifest = Gsons.MINECRAFT.fromJson(ArchiveUtils.getFile(file.toPath(), "manifest.json"),
+            CurseForgeManifest manifest = Gsons.DEFAULT.fromJson(ArchiveUtils.getFile(file.toPath(), "manifest.json"),
                     CurseForgeManifest.class);
 
             if (projectId != null) {
@@ -233,8 +322,9 @@ public class ImportPackUtils {
 
             ArchiveUtils.extract(file.toPath(), tmpDir);
 
-            new InstanceInstallerDialog(manifest, tmpDir);
-        } catch (Exception e) {
+            InstanceInstallerDialog instanceInstallerDialog = new InstanceInstallerDialog(manifest, tmpDir);
+            instanceInstallerDialog.setVisible(true);
+        } catch (JsonSyntaxException e) {
             LogManager.logStackTrace("Failed to install CurseForge pack", e);
             FileUtils.deleteDirectory(tmpDir);
             return false;
@@ -255,7 +345,8 @@ public class ImportPackUtils {
                 ModrinthProject project = ModrinthApi.getProject(version.projectId);
 
                 if (project != null) {
-                    new InstanceInstallerDialog(project, version);
+                    InstanceInstallerDialog instanceInstallerDialog = new InstanceInstallerDialog(project, version);
+                    instanceInstallerDialog.setVisible(true);
 
                     return true;
                 }
@@ -265,10 +356,10 @@ public class ImportPackUtils {
             }
         }
 
-        Path tmpDir = FileSystem.TEMP.resolve("modrinthimport" + file.getName().toString().toLowerCase());
+        Path tmpDir = FileSystem.TEMP.resolve("modrinthimport" + file.getName().toLowerCase(Locale.ENGLISH));
 
         try {
-            ModrinthModpackManifest manifest = Gsons.MINECRAFT
+            ModrinthModpackManifest manifest = Gsons.DEFAULT
                     .fromJson(ArchiveUtils.getFile(file.toPath(), "modrinth.index.json"),
                             ModrinthModpackManifest.class);
 
@@ -289,8 +380,9 @@ public class ImportPackUtils {
 
             ArchiveUtils.extract(file.toPath(), tmpDir);
 
-            new InstanceInstallerDialog(manifest, tmpDir);
-        } catch (Exception e) {
+            InstanceInstallerDialog instanceInstallerDialog = new InstanceInstallerDialog(manifest, tmpDir);
+            instanceInstallerDialog.setVisible(true);
+        } catch (JsonSyntaxException e) {
             LogManager.logStackTrace("Failed to install Modrinth pack", e);
             FileUtils.deleteDirectory(tmpDir);
             return false;
@@ -300,9 +392,13 @@ public class ImportPackUtils {
     }
 
     public static boolean loadMultiMCFormat(Path extractedPath) {
-        try (FileReader fileReader = new FileReader(extractedPath.resolve("mmc-pack.json").toFile());
-                InputStream instanceCfgStream = new FileInputStream(extractedPath.resolve("instance.cfg").toFile())) {
-            MultiMCManifest manifest = Gsons.MINECRAFT.fromJson(fileReader, MultiMCManifest.class);
+        try (InputStreamReader fileReader = new InputStreamReader(
+                Files.newInputStream(extractedPath.resolve("mmc-pack.json")),
+                StandardCharsets.UTF_8);
+                InputStreamReader instanceCfgStream = new InputStreamReader(
+                        Files.newInputStream(extractedPath.resolve("instance.cfg")),
+                        StandardCharsets.UTF_8)) {
+            MultiMCManifest manifest = Gsons.DEFAULT.fromJson(fileReader, MultiMCManifest.class);
 
             Properties props = new Properties();
             props.load(instanceCfgStream);
@@ -314,7 +410,8 @@ public class ImportPackUtils {
                 return false;
             }
 
-            new InstanceInstallerDialog(manifest, extractedPath);
+            InstanceInstallerDialog instanceInstallerDialog = new InstanceInstallerDialog(manifest, extractedPath);
+            instanceInstallerDialog.setVisible(true);
         } catch (Exception e) {
             LogManager.logStackTrace("Failed to install MultiMC pack", e);
             return false;

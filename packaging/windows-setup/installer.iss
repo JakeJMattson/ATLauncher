@@ -1,6 +1,6 @@
 #define MyAppName "ATLauncher"
 #define MyAppURL "https://atlauncher.com"
-#define MyAppVersion "1.1.0.0"
+#define MyAppVersion "1.3.0.0"
 
 [Setup]
 AppId={{2F5FDA11-45A5-4CC3-8E51-5E11E2481697}
@@ -12,6 +12,7 @@ VersionInfoVersion={#MyAppVersion}
 AppPublisherURL={#MyAppURL}
 AppSupportURL={#MyAppURL}
 AppUpdatesURL={#MyAppURL}
+AlwaysShowComponentsList=no
 DefaultDirName={userappdata}\{#MyAppName}
 DisableDirPage=auto
 DisableWelcomePage=no
@@ -30,7 +31,7 @@ WizardStyle=modern
 ChangesAssociations=yes
 
 [Run]
-Filename: {tmp}\7za.exe; Parameters: "x ""{tmp}\jre.zip"" -o""{app}\"" * -r -aoa"; Flags: runhidden runascurrentuser; Components: java
+Filename: {tmp}\7za.exe; Parameters: "x ""{tmp}\jre.zip"" -o""{app}\"" * -r -aoa"; Flags: runhidden runascurrentuser
 Filename: {app}\{#MyAppName}.exe; Description: {cm:LaunchProgram,{#MyAppName}}; Flags: nowait postinstall skipifsilent
 
 [Tasks]
@@ -39,11 +40,7 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 [Files]
 Source: "7za.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall
 Source: "{tmp}\{#MyAppName}.exe"; DestDir: "{app}"; Flags: external ignoreversion
-Source: "{tmp}\jre.zip"; DestDir: "{tmp}"; Flags: external deleteafterinstall; Components: java
-
-[Components]
-Name: "atlauncher"; Description: "ATLauncher"; ExtraDiskSpaceRequired: 20000000; Types: full compact custom; Flags: fixed
-Name: "java"; Description: "Install Java"; ExtraDiskSpaceRequired: 129016602; Types: full
+Source: "{tmp}\jre.zip"; DestDir: "{tmp}"; Flags: external deleteafterinstall
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -54,14 +51,73 @@ Name: "{userdesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppName}.exe"; Tasks: d
 Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"
 
 [InstallDelete]
-Type: filesandordirs; Name: "{app}\jre"; Components: java
+Type: filesandordirs; Name: "{app}\jre"
 
 [UninstallDelete]
-Type: filesandordirs; Name: "{app}\jre"; Components: java
+Type: filesandordirs; Name: "{app}\jre"
 
 [Code]
+#include "lib/JsonHelpers.pas"
+const
+CONFIGURL = 'https://download.nodecdn.net/containers/atl/launcher/json/config.json';
+FALLBACKx86 = 'https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.9%2B9.1/OpenJDK17U-jre_x86-32_windows_hotspot_17.0.9_9.zip';
+FALLBACKx64 = 'https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.9%2B9.1/OpenJDK17U-jre_x64_windows_hotspot_17.0.9_9.zip';
+
 var
   DownloadPage: TDownloadWizardPage;
+  FallbackUrl, FallbackHash, Url, Hash, Folder: WideString;
+
+procedure GetJreInfo;
+  var
+    WinHttpReq: Variant;
+    Json, OS: string;
+    JsonParser: TJsonParser;
+    JsonRoot, BundledJreObject, OSObject: TJsonObject;
+begin
+  if IsWin64 then
+    begin
+      OS := 'windowsx64'
+      FallbackUrl := FALLBACKx64
+      FallbackHash := '6c491d6f8c28c6f451f08110a30348696a04b009f8c58592191046e0fab1477b'
+    end
+  else
+    begin
+      OS := 'windowsx86'
+      FallbackUrl := FALLBACKx86
+      FallbackHash := '2f9fe8b587400e89cd3ef33b71e0517ab99a12a5ee623382cbe9f5078bf2b435'
+    end;
+  Try
+    WinHttpReq := CreateOleObject('WinHttp.WinHttpRequest.5.1');
+    WinHttpReq.Open('GET', CONFIGURL, False);
+    WinHttpReq.Send('');
+    if WinHttpReq.Status = 200 then
+     begin
+        Json := WinHttpReq.ResponseText
+        if ParseJsonAndLogErrors(JsonParser, Json) then
+          begin
+            JsonRoot := GetJsonRoot(JsonParser.Output);
+            if not FindJsonObject(JsonParser.Output, JsonRoot, 'bundledJre', BundledJreObject) or
+            not FindJsonObject(JsonParser.Output, BundledJreObject, OS, OSObject) or
+            not FindJsonString(JsonParser.Output, OSObject, 'url', Url) or
+            not FindJsonString(JsonParser.Output, OSObject, 'hash', Hash) or
+            not FindJsonString(JsonParser.Output, OSObject, 'folder',Folder) then
+            begin
+              RaiseException('Failed to read from ' + CONFIGURL + ', falling back to defaults')
+            end;
+        end;
+      ClearJsonParser(JsonParser)
+      end
+      else
+        begin
+          RaiseException('Failed to read from ' + CONFIGURL + ', falling back to defaults')
+      end;
+  Except
+    MsgBox(GetExceptionMessage,mbError,MB_OK)
+    Url := FallbackUrl
+    Hash := FallbackHash
+    Folder := 'jdk-17.0.9+9-jre'
+ end;
+end;
 
 procedure InitializeWizard;
 begin
@@ -71,39 +127,53 @@ end;
 procedure CurStepChanged(CurStep: TSetupStep);
 begin
   if (CurStep = ssPostInstall) then begin
-    if WizardIsComponentSelected('java') then begin
-      if not RenameFile(ExpandConstant('{app}') + '\jdk-17.0.3+7-jre', ExpandConstant('{app}/jre')) then begin
-        MsgBox('Failed to rename jre directory. Please try again or uncheck the "Install Java" option', mbError, MB_OK);
-        WizardForm.Close;
-      end
+    if not RenameFile(ExpandConstant('{app}') + '\' + Folder, ExpandConstant('{app}/jre')) then begin
+      MsgBox('Failed to rename jre directory. Please try again', mbError, MB_OK);
+      WizardForm.Close;
     end
   end
 end;
 
 function NextButtonClick(CurPageID: Integer): Boolean;
+var
+  Retry: Boolean;
+  Answer: Integer;
 begin
   if CurPageID = wpReady then begin
-    DownloadPage.Clear;
-
-    DownloadPage.Add('https://download.nodecdn.net/containers/atl/ATLauncher.exe', '{#MyAppName}.exe', '');
-
-    if WizardIsComponentSelected('java') then begin
-      if IsWin64 then begin
-        DownloadPage.Add('https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.3%2B7/OpenJDK17U-jre_x64_windows_hotspot_17.0.3_7.zip', 'jre.zip', 'd77745fdb57b51116f7b8fabd7d251067edbe3c94ea18fa224f64d9584b41a97');
-      end else begin
-        DownloadPage.Add('https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.3%2B7/OpenJDK17U-jre_x86-32_windows_hotspot_17.0.3_7.zip', 'jre.zip', 'e29e311e4200a32438ef65637a75eb8eb09f73a37cef3877f08d02b6355cd221');
-      end;
-    end;
-
-    DownloadPage.Show;
     try
-      try
-        DownloadPage.Download;
-        Result := True;
-      except
-          SuppressibleMsgBox(AddPeriod(GetExceptionMessage), mbCriticalError, MB_OK, IDOK);
-        Result := False;
-      end;
+      // The launcher download must complete
+      repeat
+        DownloadPage.Clear;
+        DownloadPage.Add('https://download.nodecdn.net/containers/atl/ATLauncher.exe', '{#MyAppName}.exe', '');
+        DownloadPage.Show;
+        try
+          DownloadPage.Download;
+          Result := True;
+          Retry := False;
+        except
+          Answer := SuppressibleMsgBox(AddPeriod(GetExceptionMessage), mbCriticalError, MB_RETRYCANCEL, IDRETRY);
+          Retry := (Answer = IDRETRY);
+          Result := (Answer <> IDCANCEL);
+        end;
+      until not Retry;
+
+      if not Result then Exit;
+
+      // Now do the download for the JRE, but make it optional and okay if it fails
+      repeat
+        DownloadPage.Clear;
+        GetJreInfo;
+        DownloadPage.Add(Url, 'jre.zip', Hash);
+        try
+          DownloadPage.Download;
+          Result := True;
+          Retry := False;
+        except
+          Answer := SuppressibleMsgBox(AddPeriod(GetExceptionMessage), mbCriticalError, MB_ABORTRETRYIGNORE, IDIGNORE);
+          Retry := (Answer = IDRETRY);
+          Result := (Answer <> IDABORT);
+        end;
+      until not Retry;
     finally
       DownloadPage.Hide;
     end;

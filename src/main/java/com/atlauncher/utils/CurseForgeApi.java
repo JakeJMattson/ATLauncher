@@ -21,25 +21,31 @@ import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import com.atlauncher.Gsons;
+import com.atlauncher.Network;
 import com.atlauncher.constants.Constants;
 import com.atlauncher.data.curseforge.CurseForgeCategoryForGame;
 import com.atlauncher.data.curseforge.CurseForgeCoreApiResponse;
 import com.atlauncher.data.curseforge.CurseForgeFile;
 import com.atlauncher.data.curseforge.CurseForgeFingerprint;
 import com.atlauncher.data.curseforge.CurseForgeProject;
+import com.atlauncher.managers.ConfigManager;
 import com.atlauncher.managers.LogManager;
-import com.atlauncher.network.Download;
+import com.atlauncher.network.NetworkClient;
 import com.google.gson.reflect.TypeToken;
 
 import okhttp3.CacheControl;
+import okhttp3.Headers;
 import okhttp3.MediaType;
 import okhttp3.RequestBody;
 
@@ -47,25 +53,29 @@ import okhttp3.RequestBody;
  * Various utility methods for interacting with the CurseForge API.
  */
 public class CurseForgeApi {
-    public static List<CurseForgeProject> searchCurseForge(int sectionId, String query, int page, int modLoaderType,
+    private final static Headers REQUEST_HEADERS = Headers.of("x-api-key", Constants.CURSEFORGE_CORE_API_KEY);
+
+    public static List<CurseForgeProject> searchCurseForge(int sectionId, String query, int page,
+            List<Integer> modLoaderTypes,
             String sort) {
-        return searchCurseForge(null, sectionId, query, page, modLoaderType, sort);
+        return searchCurseForge(null, sectionId, query, page, modLoaderTypes, sort);
     }
 
-    public static List<CurseForgeProject> searchCurseForge(int sectionId, String query, int page, int modLoaderType,
+    public static List<CurseForgeProject> searchCurseForge(int sectionId, String query, int page,
+            List<Integer> modLoaderTypes,
             String sort, Integer categoryId) {
-        return searchCurseForge(null, sectionId, query, page, modLoaderType, sort, true, categoryId);
+        return searchCurseForge(null, sectionId, query, page, modLoaderTypes, sort, true, categoryId);
     }
 
     public static List<CurseForgeProject> searchCurseForge(String gameVersion, int sectionId, String query, int page,
-            int modLoaderType, String sort, Integer categoryId) {
-        return searchCurseForge(gameVersion, sectionId, query, page, modLoaderType, sort, true, categoryId);
+            List<Integer> modLoaderTypes, String sort, Integer categoryId) {
+        return searchCurseForge(gameVersion, sectionId, query, page, modLoaderTypes, sort, true, categoryId);
     }
 
     public static List<CurseForgeProject> searchCurseForge(String gameVersion, int sectionId, String query, int page,
-            int modLoaderType, String sort, boolean sortDescending, Integer categoryId) {
+            List<Integer> modLoaderTypes, String sort, boolean sortDescending, Integer categoryId) {
         try {
-            String url = String.format(
+            String url = String.format(Locale.ENGLISH,
                     "%s/mods/search?gameId=432&classId=%s&searchFilter=%s&sortField=%s&sortOrder=%s&pageSize=%d&index=%d",
                     Constants.CURSEFORGE_CORE_API_URL, sectionId,
                     URLEncoder.encode(query, StandardCharsets.UTF_8.name()),
@@ -73,8 +83,8 @@ public class CurseForgeApi {
                     sortDescending ? "desc" : "asc",
                     Constants.CURSEFORGE_PAGINATION_SIZE, page * Constants.CURSEFORGE_PAGINATION_SIZE);
 
-            if (modLoaderType != 0) {
-                url += "&modLoaderType=" + modLoaderType;
+            if (modLoaderTypes != null && !modLoaderTypes.isEmpty()) {
+                url += "&modLoaderTypes=" + Gsons.DEFAULT.toJson(modLoaderTypes);
             }
 
             if (gameVersion != null) {
@@ -85,14 +95,18 @@ public class CurseForgeApi {
                 url += "&categoryId=" + categoryId;
             }
 
-            Download download = Download.build()
-                    .cached(new CacheControl.Builder().maxStale(10, TimeUnit.MINUTES).build())
-                    .setUrl(url).header("x-api-key", Constants.CURSEFORGE_CORE_API_KEY);
+            java.lang.reflect.Type type = new TypeToken<CurseForgeCoreApiResponse<List<CurseForgeProject>>>() {}
+                    .getType();
 
-            java.lang.reflect.Type type = new TypeToken<CurseForgeCoreApiResponse<List<CurseForgeProject>>>() {
-            }.getType();
+            CurseForgeCoreApiResponse<List<CurseForgeProject>> response = NetworkClient.getCached(
+                    url,
+                    REQUEST_HEADERS,
+                    type, new CacheControl.Builder().maxStale(10, TimeUnit.MINUTES).build());
 
-            CurseForgeCoreApiResponse<List<CurseForgeProject>> response = download.asType(type);
+            if (response == null || response.data.isEmpty()) {
+                LogManager.warn("CurseForge API returned no results for " + url);
+                Network.removeUrlFromCache(url);
+            }
 
             if (response != null) {
                 return response.data;
@@ -105,68 +119,148 @@ public class CurseForgeApi {
     }
 
     public static List<CurseForgeProject> searchCurseForge(String gameVersion, int sectionId, String query, int page,
-            int modLoaderType, String sort) {
-        return searchCurseForge(gameVersion, sectionId, query, page, modLoaderType, sort, null);
+            List<Integer> modLoaderTypes, String sort) {
+        return searchCurseForge(gameVersion, sectionId, query, page, modLoaderTypes, sort, null);
     }
 
     public static List<CurseForgeProject> searchWorlds(String gameVersion, String query, int page, String sort,
             String categoryId) {
-        Integer categoryIdParam = categoryId == null ? null : Integer.parseInt(categoryId);
+        Integer categoryIdParam = Utils.getSafeIntegerFromString(categoryId);
 
-        return searchCurseForge(gameVersion, Constants.CURSEFORGE_WORLDS_SECTION_ID, query, page, 0, sort,
+        return searchCurseForge(gameVersion, Constants.CURSEFORGE_WORLDS_SECTION_ID, query, page, null, sort,
                 categoryIdParam);
     }
 
     public static List<CurseForgeProject> searchResourcePacks(String query, int page, String sort, String categoryId) {
-        Integer categoryIdParam = categoryId == null ? null : Integer.parseInt(categoryId);
+        Integer categoryIdParam = Utils.getSafeIntegerFromString(categoryId);
 
-        return searchCurseForge(Constants.CURSEFORGE_RESOURCE_PACKS_SECTION_ID, query, page, 0, sort,
+        return searchCurseForge(Constants.CURSEFORGE_RESOURCE_PACKS_SECTION_ID, query, page, null, sort,
+                categoryIdParam);
+    }
+
+    public static List<CurseForgeProject> searchShaderPacks(String query, int page, String sort, String categoryId) {
+        Integer categoryIdParam = Utils.getSafeIntegerFromString(categoryId);
+
+        return searchCurseForge(Constants.CURSEFORGE_SHADER_PACKS_SECTION_ID, query, page, null, sort,
                 categoryIdParam);
     }
 
     public static List<CurseForgeProject> searchMods(String gameVersion, String query, int page, String sort,
             String categoryId) {
-        Integer categoryIdParam = categoryId == null ? null : Integer.parseInt(categoryId);
+        Integer categoryIdParam = Utils.getSafeIntegerFromString(categoryId);
 
-        return searchCurseForge(gameVersion, Constants.CURSEFORGE_MODS_SECTION_ID, query, page, 0, sort,
+        return searchCurseForge(gameVersion, Constants.CURSEFORGE_MODS_SECTION_ID, query, page, null, sort,
+                categoryIdParam);
+    }
+
+    public static List<CurseForgeProject> searchPlugins(String gameVersion, String query, int page, String sort,
+            String categoryId) {
+        Integer categoryIdParam = Utils.getSafeIntegerFromString(categoryId);
+
+        // CurseForge plugins don't seem to update their supported versions often, so we have to just get all
+        return searchCurseForge(gameVersion, Constants.CURSEFORGE_PLUGINS_SECTION_ID, query, page, null, sort,
                 categoryIdParam);
     }
 
     public static List<CurseForgeProject> searchModPacks(String query, int page, String sort, boolean sortDescending,
             String categoryId,
             String minecraftVersion) {
-        Integer categoryIdParam = categoryId == null ? null : Integer.parseInt(categoryId);
+        Integer categoryIdParam = Utils.getSafeIntegerFromString(categoryId);
 
-        return searchCurseForge(minecraftVersion, Constants.CURSEFORGE_MODPACKS_SECTION_ID, query, page, 0, sort,
+        return searchCurseForge(minecraftVersion, Constants.CURSEFORGE_MODPACKS_SECTION_ID, query, page, null, sort,
                 sortDescending, categoryIdParam);
     }
 
     public static List<CurseForgeProject> searchModsForFabric(String gameVersion, String query, int page, String sort,
             String categoryId) {
-        Integer categoryIdParam = categoryId == null ? null : Integer.parseInt(categoryId);
+        Integer categoryIdParam = Utils.getSafeIntegerFromString(categoryId);
+        List<Integer> modLoaderTypes = Collections.singletonList(Constants.CURSEFORGE_FABRIC_MODLOADER_ID);
 
         return searchCurseForge(gameVersion, Constants.CURSEFORGE_MODS_SECTION_ID, query, page,
-                Constants.CURSEFORGE_FABRIC_MODLOADER_ID, sort, categoryIdParam);
+                modLoaderTypes, sort, categoryIdParam);
+    }
+
+    public static List<CurseForgeProject> searchModsForQuilt(String gameVersion, String query, int page, String sort,
+            String categoryId) {
+        Integer categoryIdParam = Utils.getSafeIntegerFromString(categoryId);
+        List<Integer> modLoaderTypes = Arrays.asList(Constants.CURSEFORGE_FABRIC_MODLOADER_ID,
+                Constants.CURSEFORGE_QUILT_MODLOADER_ID);
+
+        return searchCurseForge(gameVersion, Constants.CURSEFORGE_MODS_SECTION_ID, query, page,
+                modLoaderTypes, sort, categoryIdParam);
     }
 
     public static List<CurseForgeProject> searchModsForForge(String gameVersion, String query, int page, String sort,
             String categoryId) {
-        Integer categoryIdParam = categoryId == null ? null : Integer.parseInt(categoryId);
+        Integer categoryIdParam = Utils.getSafeIntegerFromString(categoryId);
+        List<Integer> modLoaderTypes = Collections.singletonList(Constants.CURSEFORGE_FORGE_MODLOADER_ID);
 
         return searchCurseForge(gameVersion, Constants.CURSEFORGE_MODS_SECTION_ID, query, page,
-                Constants.CURSEFORGE_FORGE_MODLOADER_ID, sort, categoryIdParam);
+                modLoaderTypes, sort, categoryIdParam);
+    }
+
+    public static List<CurseForgeProject> searchModsForForgeOrFabric(String gameVersion, String query, int page,
+            String sort,
+            String categoryId) {
+        Integer categoryIdParam = Utils.getSafeIntegerFromString(categoryId);
+        List<Integer> modLoaderTypes = Arrays.asList(Constants.CURSEFORGE_FORGE_MODLOADER_ID,
+                Constants.CURSEFORGE_FABRIC_MODLOADER_ID);
+
+        return searchCurseForge(gameVersion, Constants.CURSEFORGE_MODS_SECTION_ID, query, page,
+                modLoaderTypes, sort, categoryIdParam);
+    }
+
+    public static List<CurseForgeProject> searchModsForNeoForge(String gameVersion, String query, int page, String sort,
+            String categoryId) {
+        Integer categoryIdParam = Utils.getSafeIntegerFromString(categoryId);
+
+        List<Integer> modLoaderTypes = new ArrayList<>();
+        modLoaderTypes.add(Constants.CURSEFORGE_NEOFORGE_MODLOADER_ID);
+
+        List<String> neoForgeForgeCompatabilityVersions = ConfigManager
+                .getConfigItem("loaders.neoforge.forgeCompatibleMinecraftVersions", new ArrayList<>());
+        if (neoForgeForgeCompatabilityVersions.contains(gameVersion)) {
+            modLoaderTypes.add(Constants.CURSEFORGE_FORGE_MODLOADER_ID);
+        }
+
+        return searchCurseForge(gameVersion, Constants.CURSEFORGE_MODS_SECTION_ID, query, page,
+                modLoaderTypes, sort, categoryIdParam);
+    }
+
+    public static List<CurseForgeProject> searchModsForNeoForgeOrFabric(String gameVersion, String query, int page,
+            String sort,
+            String categoryId) {
+        Integer categoryIdParam = Utils.getSafeIntegerFromString(categoryId);
+
+        List<Integer> modLoaderTypes = new ArrayList<>();
+        modLoaderTypes.add(Constants.CURSEFORGE_NEOFORGE_MODLOADER_ID);
+        modLoaderTypes.add(Constants.CURSEFORGE_FABRIC_MODLOADER_ID);
+
+        List<String> neoForgeForgeCompatabilityVersions = ConfigManager
+                .getConfigItem("loaders.neoforge.forgeCompatibleMinecraftVersions", new ArrayList<>());
+        if (neoForgeForgeCompatabilityVersions.contains(gameVersion)) {
+            modLoaderTypes.add(Constants.CURSEFORGE_FORGE_MODLOADER_ID);
+        }
+
+        return searchCurseForge(gameVersion, Constants.CURSEFORGE_MODS_SECTION_ID, query, page,
+                modLoaderTypes, sort, categoryIdParam);
     }
 
     public static List<CurseForgeFile> getFilesForProject(int projectId) {
-        String url = String.format("%s/mods/%d/files?pageSize=1000", Constants.CURSEFORGE_CORE_API_URL, projectId);
+        String url = String.format(Locale.ENGLISH, "%s/mods/%d/files?pageSize=1000", Constants.CURSEFORGE_CORE_API_URL,
+                projectId);
 
-        Download download = Download.build().setUrl(url).header("x-api-key", Constants.CURSEFORGE_CORE_API_KEY)
-                .cached(new CacheControl.Builder().maxStale(10, TimeUnit.MINUTES).build());
+        java.lang.reflect.Type type = new TypeToken<CurseForgeCoreApiResponse<List<CurseForgeFile>>>() {}.getType();
 
-        java.lang.reflect.Type type = new TypeToken<CurseForgeCoreApiResponse<List<CurseForgeFile>>>() {
-        }.getType();
+        CurseForgeCoreApiResponse<List<CurseForgeFile>> response = NetworkClient.getCached(
+                url,
+                REQUEST_HEADERS,
+                type, new CacheControl.Builder().maxStale(10, TimeUnit.MINUTES).build());
 
-        CurseForgeCoreApiResponse<List<CurseForgeFile>> response = download.asType(type);
+        if (response == null || response.data.isEmpty()) {
+            LogManager.warn("CurseForge API returned no files for project " + projectId);
+            Network.removeUrlFromCache(url);
+        }
 
         if (response != null) {
             return response.data;
@@ -176,20 +270,40 @@ public class CurseForgeApi {
     }
 
     public static CurseForgeFile getFileForProject(int projectId, int fileId) {
-        String url = String.format("%s/mods/%d/files/%d", Constants.CURSEFORGE_CORE_API_URL, projectId, fileId);
+        String url = String.format(Locale.ENGLISH, "%s/mods/%d/files/%d", Constants.CURSEFORGE_CORE_API_URL, projectId,
+                fileId);
 
-        Download download = Download.build().setUrl(url).header("x-api-key", Constants.CURSEFORGE_CORE_API_KEY)
-                .cached(new CacheControl.Builder().maxStale(1, TimeUnit.HOURS).build());
+        java.lang.reflect.Type type = new TypeToken<CurseForgeCoreApiResponse<CurseForgeFile>>() {}.getType();
 
-        java.lang.reflect.Type type = new TypeToken<CurseForgeCoreApiResponse<CurseForgeFile>>() {
-        }.getType();
-
-        CurseForgeCoreApiResponse<CurseForgeFile> response = download.asType(type);
+        CurseForgeCoreApiResponse<CurseForgeFile> response = NetworkClient.getCached(
+                url,
+                REQUEST_HEADERS,
+                type, new CacheControl.Builder().maxStale(1, TimeUnit.HOURS).build());
 
         if (response != null) {
             return response.data;
         }
 
+        Network.removeUrlFromCache(url);
+        return null;
+    }
+
+    public static String getProjectDescription(int projectId) {
+        String url = String.format(Locale.ENGLISH, "%s/mods/%d/description?raw=true", Constants.CURSEFORGE_CORE_API_URL,
+                projectId);
+
+        java.lang.reflect.Type type = new TypeToken<CurseForgeCoreApiResponse<String>>() {}.getType();
+
+        CurseForgeCoreApiResponse<String> response = NetworkClient.getCached(
+                url,
+                REQUEST_HEADERS,
+                type, new CacheControl.Builder().maxStale(1, TimeUnit.HOURS).build());
+
+        if (response != null) {
+            return response.data;
+        }
+
+        Network.removeUrlFromCache(url);
         return null;
     }
 
@@ -198,20 +312,20 @@ public class CurseForgeApi {
     }
 
     public static CurseForgeProject getProjectById(String projectId) {
-        String url = String.format("%s/mods/%s", Constants.CURSEFORGE_CORE_API_URL, projectId);
+        String url = String.format(Locale.ENGLISH, "%s/mods/%s", Constants.CURSEFORGE_CORE_API_URL, projectId);
 
-        Download download = Download.build().setUrl(url).header("x-api-key", Constants.CURSEFORGE_CORE_API_KEY)
-                .cached(new CacheControl.Builder().maxStale(10, TimeUnit.MINUTES).build());
+        java.lang.reflect.Type type = new TypeToken<CurseForgeCoreApiResponse<CurseForgeProject>>() {}.getType();
 
-        java.lang.reflect.Type type = new TypeToken<CurseForgeCoreApiResponse<CurseForgeProject>>() {
-        }.getType();
-
-        CurseForgeCoreApiResponse<CurseForgeProject> response = download.asType(type);
+        CurseForgeCoreApiResponse<CurseForgeProject> response = NetworkClient.getCached(
+                url,
+                REQUEST_HEADERS,
+                type, new CacheControl.Builder().maxStale(10, TimeUnit.MINUTES).build());
 
         if (response != null) {
             return response.data;
         }
 
+        Network.removeUrlFromCache(url);
         return null;
     }
 
@@ -224,18 +338,23 @@ public class CurseForgeApi {
     }
 
     private static CurseForgeProject getProjectBySlug(String slug, int classId) {
-        String url = String.format("%s/mods/search?gameId=432&slug=%s&classId=%s", Constants.CURSEFORGE_CORE_API_URL,
+        String url = String.format(Locale.ENGLISH, "%s/mods/search?gameId=432&slug=%s&classId=%s",
+                Constants.CURSEFORGE_CORE_API_URL,
                 slug, classId);
 
-        Download download = Download.build().setUrl(url).header("x-api-key", Constants.CURSEFORGE_CORE_API_KEY)
-                .cached(new CacheControl.Builder().maxStale(10, TimeUnit.MINUTES).build());
+        java.lang.reflect.Type type = new TypeToken<CurseForgeCoreApiResponse<List<CurseForgeProject>>>() {}.getType();
 
-        java.lang.reflect.Type type = new TypeToken<CurseForgeCoreApiResponse<List<CurseForgeProject>>>() {
-        }.getType();
+        CurseForgeCoreApiResponse<List<CurseForgeProject>> response = NetworkClient.getCached(
+                url,
+                REQUEST_HEADERS,
+                type, new CacheControl.Builder().maxStale(10, TimeUnit.MINUTES).build());
 
-        CurseForgeCoreApiResponse<List<CurseForgeProject>> response = download.asType(type);
+        if (response == null || response.data.isEmpty()) {
+            LogManager.warn("CurseForge API returned no results for " + url);
+            Network.removeUrlFromCache(url);
+        }
 
-        if (response != null && response.data.size() != 0) {
+        if (response != null && !response.data.isEmpty()) {
             return response.data.get(0);
         }
 
@@ -243,6 +362,10 @@ public class CurseForgeApi {
     }
 
     public static Map<Integer, CurseForgeProject> getProjectsAsMap(int[] addonIds) {
+        if (addonIds == null || addonIds.length == 0) {
+            return Collections.emptyMap();
+        }
+
         try {
             List<CurseForgeProject> projects = getProjects(addonIds);
 
@@ -258,24 +381,23 @@ public class CurseForgeApi {
     }
 
     public static List<CurseForgeProject> getProjects(int[] projectIds) {
-        Download download = Download.build();
+        if (projectIds == null || projectIds.length == 0) {
+            return Collections.emptyList();
+        }
 
         String url = String.format("%s/mods", Constants.CURSEFORGE_CORE_API_URL);
 
         Map<String, int[]> body = new HashMap<>();
         body.put("modIds", projectIds);
 
-        download = download
-                .post(RequestBody.create(Gsons.DEFAULT.toJson(body),
-                        MediaType.get("application/json; charset=utf-8")));
+        java.lang.reflect.Type type = new TypeToken<CurseForgeCoreApiResponse<List<CurseForgeProject>>>() {}.getType();
 
-        download = download.setUrl(url).header("x-api-key", Constants.CURSEFORGE_CORE_API_KEY)
-                .cached(new CacheControl.Builder().maxStale(10, TimeUnit.MINUTES).build());
-
-        java.lang.reflect.Type type = new TypeToken<CurseForgeCoreApiResponse<List<CurseForgeProject>>>() {
-        }.getType();
-
-        CurseForgeCoreApiResponse<List<CurseForgeProject>> response = download.asType(type);
+        CurseForgeCoreApiResponse<List<CurseForgeProject>> response = NetworkClient.post(
+                url,
+                REQUEST_HEADERS,
+                RequestBody.create(Gsons.DEFAULT.toJson(body),
+                        MediaType.get("application/json; charset=utf-8")),
+                type);
 
         if (response != null) {
             return response.data;
@@ -285,21 +407,22 @@ public class CurseForgeApi {
     }
 
     public static List<CurseForgeFile> getFiles(int[] fileIds) {
+        if (fileIds == null || fileIds.length == 0) {
+            return Collections.emptyList();
+        }
+
         Map<String, int[]> body = new HashMap<>();
         body.put("fileIds", fileIds);
 
-        Download download = Download.build()
-                .post(RequestBody.create(Gsons.DEFAULT.toJson(
+        java.lang.reflect.Type type = new TypeToken<CurseForgeCoreApiResponse<List<CurseForgeFile>>>() {}.getType();
+
+        CurseForgeCoreApiResponse<List<CurseForgeFile>> response = NetworkClient.post(
+                String.format("%s/mods/files", Constants.CURSEFORGE_CORE_API_URL),
+                REQUEST_HEADERS,
+                RequestBody.create(Gsons.DEFAULT.toJson(
                         body),
-                        MediaType.get("application/json; charset=utf-8")))
-                .setUrl(String.format("%s/mods/files", Constants.CURSEFORGE_CORE_API_URL))
-                .header("x-api-key", Constants.CURSEFORGE_CORE_API_KEY)
-                .cached(new CacheControl.Builder().maxStale(10, TimeUnit.MINUTES).build());
-
-        java.lang.reflect.Type type = new TypeToken<CurseForgeCoreApiResponse<List<CurseForgeFile>>>() {
-        }.getType();
-
-        CurseForgeCoreApiResponse<List<CurseForgeFile>> response = download.asType(type);
+                        MediaType.get("application/json; charset=utf-8")),
+                type);
 
         if (response != null) {
             return response.data;
@@ -309,24 +432,19 @@ public class CurseForgeApi {
     }
 
     public static CurseForgeFingerprint checkFingerprints(Long[] murmurHashes) {
-        Download download = Download.build();
-
         String url = String.format("%s/fingerprints", Constants.CURSEFORGE_CORE_API_URL);
 
         Map<String, Long[]> body = new HashMap<>();
         body.put("fingerprints", murmurHashes);
 
-        download = download
-                .post(RequestBody.create(Gsons.DEFAULT.toJson(body),
-                        MediaType.get("application/json; charset=utf-8")));
+        java.lang.reflect.Type type = new TypeToken<CurseForgeCoreApiResponse<CurseForgeFingerprint>>() {}.getType();
 
-        download = download.setUrl(url).header("x-api-key", Constants.CURSEFORGE_CORE_API_KEY)
-                .cached(new CacheControl.Builder().maxStale(10, TimeUnit.MINUTES).build());
-
-        java.lang.reflect.Type type = new TypeToken<CurseForgeCoreApiResponse<CurseForgeFingerprint>>() {
-        }.getType();
-
-        CurseForgeCoreApiResponse<CurseForgeFingerprint> response = download.asType(type);
+        CurseForgeCoreApiResponse<CurseForgeFingerprint> response = NetworkClient.post(
+                url,
+                REQUEST_HEADERS,
+                RequestBody.create(Gsons.DEFAULT.toJson(body),
+                        MediaType.get("application/json; charset=utf-8")),
+                type);
 
         if (response != null) {
             return response.data;
@@ -338,13 +456,18 @@ public class CurseForgeApi {
     public static List<CurseForgeCategoryForGame> getCategories() {
         String url = String.format("%s/categories?gameId=432", Constants.CURSEFORGE_CORE_API_URL);
 
-        Download download = Download.build().setUrl(url).header("x-api-key", Constants.CURSEFORGE_CORE_API_KEY)
-                .cached(new CacheControl.Builder().maxStale(1, TimeUnit.HOURS).build());
+        java.lang.reflect.Type type = new TypeToken<CurseForgeCoreApiResponse<List<CurseForgeCategoryForGame>>>() {}
+                .getType();
 
-        java.lang.reflect.Type type = new TypeToken<CurseForgeCoreApiResponse<List<CurseForgeCategoryForGame>>>() {
-        }.getType();
+        CurseForgeCoreApiResponse<List<CurseForgeCategoryForGame>> response = NetworkClient.getCached(
+                url,
+                REQUEST_HEADERS,
+                type, new CacheControl.Builder().maxStale(1, TimeUnit.HOURS).build());
 
-        CurseForgeCoreApiResponse<List<CurseForgeCategoryForGame>> response = download.asType(type);
+        if (response == null || response.data.isEmpty()) {
+            LogManager.warn("CurseForge API returned no results for " + url);
+            Network.removeUrlFromCache(url);
+        }
 
         if (response != null) {
             return response.data;
@@ -375,6 +498,18 @@ public class CurseForgeApi {
                 .sorted(Comparator.comparing(c -> c.name)).collect(Collectors.toList());
     }
 
+    public static List<CurseForgeCategoryForGame> getCategoriesForPlugins() {
+        List<CurseForgeCategoryForGame> categories = getCategories();
+
+        if (categories == null) {
+            return new ArrayList<>();
+        }
+
+        return categories.stream()
+                .filter(c -> c.classId != null && c.classId == Constants.CURSEFORGE_PLUGINS_SECTION_ID)
+                .sorted(Comparator.comparing(c -> c.name)).collect(Collectors.toList());
+    }
+
     public static List<CurseForgeCategoryForGame> getCategoriesForResourcePacks() {
         List<CurseForgeCategoryForGame> categories = getCategories();
 
@@ -384,6 +519,18 @@ public class CurseForgeApi {
 
         return categories.stream()
                 .filter(c -> c.classId != null && c.classId == Constants.CURSEFORGE_RESOURCE_PACKS_SECTION_ID)
+                .sorted(Comparator.comparing(c -> c.name)).collect(Collectors.toList());
+    }
+
+    public static List<CurseForgeCategoryForGame> getCategoriesForShaderPacks() {
+        List<CurseForgeCategoryForGame> categories = getCategories();
+
+        if (categories == null) {
+            return new ArrayList<>();
+        }
+
+        return categories.stream()
+                .filter(c -> c.classId != null && c.classId == Constants.CURSEFORGE_SHADER_PACKS_SECTION_ID)
                 .sorted(Comparator.comparing(c -> c.name)).collect(Collectors.toList());
     }
 

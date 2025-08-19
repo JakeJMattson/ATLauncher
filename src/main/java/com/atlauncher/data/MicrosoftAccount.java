@@ -26,11 +26,13 @@ import org.mini2Dx.gettext.GetText;
 
 import com.atlauncher.data.microsoft.Entitlements;
 import com.atlauncher.data.microsoft.LoginResponse;
+import com.atlauncher.data.microsoft.OauthDeviceCodeResponse;
 import com.atlauncher.data.microsoft.OauthTokenResponse;
 import com.atlauncher.data.microsoft.Profile;
 import com.atlauncher.data.microsoft.XboxLiveAuthResponse;
 import com.atlauncher.gui.dialogs.CreateMinecraftProfileDialog;
 import com.atlauncher.gui.dialogs.LoginWithMicrosoftDialog;
+import com.atlauncher.gui.dialogs.ProgressDialog;
 import com.atlauncher.managers.AccountManager;
 import com.atlauncher.managers.DialogManager;
 import com.atlauncher.managers.LogManager;
@@ -64,18 +66,17 @@ public class MicrosoftAccount extends AbstractAccount {
     public Date accessTokenExpiresAt;
 
     /**
-     * If the user must login again. This is usually the result of a failed
-     * accessToken refresh.
+     * If the user must login again. This is usually the result of a failed accessToken refresh.
      */
     public boolean mustLogin;
 
     public MicrosoftAccount(OauthTokenResponse oauthTokenResponse, XboxLiveAuthResponse xstsAuthResponse,
-            LoginResponse loginResponse, Profile profile) {
+        LoginResponse loginResponse, Profile profile) {
         update(oauthTokenResponse, xstsAuthResponse, loginResponse, profile);
     }
 
     public void update(OauthTokenResponse oauthTokenResponse, XboxLiveAuthResponse xstsAuthResponse,
-            LoginResponse loginResponse, Profile profile) {
+        LoginResponse loginResponse, Profile profile) {
         this.oauthToken = oauthTokenResponse;
         this.xstsAuth = xstsAuthResponse;
         this.accessToken = loginResponse.accessToken;
@@ -119,7 +120,7 @@ public class MicrosoftAccount extends AbstractAccount {
             return null;
         }
 
-        return Optional.of(profile.name).orElse(null);
+        return profile.name;
     }
 
     @Override
@@ -148,8 +149,8 @@ public class MicrosoftAccount extends AbstractAccount {
             return null;
         }
 
-        return Optional.of(profile.skins).orElse(new ArrayList<>()).stream()
-                .filter(s -> s.state.equalsIgnoreCase("ACTIVE")).findFirst().map(s -> s.url).orElse(null);
+        return Optional.ofNullable(profile.skins).orElse(new ArrayList<>()).stream()
+            .filter(s -> s.state.equalsIgnoreCase("ACTIVE")).findFirst().map(s -> s.url).orElse(null);
     }
 
     public boolean refreshAccessToken() {
@@ -177,12 +178,19 @@ public class MicrosoftAccount extends AbstractAccount {
             if (force || new Date().after(this.xstsAuth.notAfter)) {
                 LogManager.info("xsts auth expired. Attempting to get new auth");
                 XboxLiveAuthResponse xboxLiveAuthResponse = MicrosoftAuthAPI.getXBLToken(this.oauthToken.accessToken);
+                if (xboxLiveAuthResponse == null) {
+                    mustLogin = true;
+                    AccountManager.saveAccounts();
+                    LogManager.error("Failed to get XBLToken");
+                    return false;
+                }
+
                 this.xstsAuth = MicrosoftAuthAPI.getXstsToken(xboxLiveAuthResponse.token);
 
                 if (xstsAuth == null) {
                     mustLogin = true;
                     AccountManager.saveAccounts();
-                    LogManager.error("Failed to get XBLToken");
+                    LogManager.error("Failed to get XstsToken");
                     return false;
                 }
 
@@ -202,7 +210,7 @@ public class MicrosoftAccount extends AbstractAccount {
                 Entitlements entitlements = MicrosoftAuthAPI.getEntitlements(loginResponse.accessToken);
 
                 if (!(entitlements.items.stream().anyMatch(i -> i.name.equalsIgnoreCase("product_minecraft"))
-                        && entitlements.items.stream().anyMatch(i -> i.name.equalsIgnoreCase("game_minecraft")))) {
+                    && entitlements.items.stream().anyMatch(i -> i.name.equalsIgnoreCase("game_minecraft")))) {
                     LogManager.error("This account doesn't have a valid purchase of Minecraft");
                     return false;
                 }
@@ -221,7 +229,7 @@ public class MicrosoftAccount extends AbstractAccount {
 
                 this.accessTokenExpiresAt = new Date();
                 this.accessTokenExpiresAt
-                        .setTime(this.accessTokenExpiresAt.getTime() + (loginResponse.expiresIn * 1000));
+                    .setTime(this.accessTokenExpiresAt.getTime() + (loginResponse.expiresIn * 1000));
 
                 AccountManager.saveAccounts();
             }
@@ -237,14 +245,9 @@ public class MicrosoftAccount extends AbstractAccount {
     }
 
     /**
-     * This will check the user has a Minecraft profile (Game Pass subscribers will
-     * not until first login of the Minecraft Launcher).
-     *
-     * If an account doesn't have a Minecraft profile, then they either don't own
-     * Minecraft Java edition, or their Game Pass subscription has expired and no
-     * longer has a profile.
-     *
-     * @param accessToken
+     * This will check the user has a Minecraft profile (Game Pass subscribers will not until first login of the
+     * Minecraft Launcher). If an account doesn't have a Minecraft profile, then they either don't own Minecraft Java
+     * edition, or their Game Pass subscription has expired and no longer has a profile.
      */
     private boolean checkAndUpdateProfile(String accessToken) {
         Profile profile = null;
@@ -254,7 +257,8 @@ public class MicrosoftAccount extends AbstractAccount {
         } catch (DownloadException e) {
             LogManager.error("Minecraft profile not found");
 
-            new CreateMinecraftProfileDialog(accessToken);
+            CreateMinecraftProfileDialog createMinecraftProfileDialog = new CreateMinecraftProfileDialog(accessToken);
+            createMinecraftProfileDialog.setVisible(true);
 
             try {
                 profile = MicrosoftAuthAPI.getMcProfile(accessToken);
@@ -286,22 +290,29 @@ public class MicrosoftAccount extends AbstractAccount {
         boolean hasCancelled = false;
         while (mustLogin) {
             int ret = DialogManager.okCancelDialog().setTitle(GetText.tr("You Must Login Again"))
-                    .setContent(GetText.tr("You must login again in order to continue.")).setType(DialogManager.INFO)
-                    .show();
+                .setContent(GetText.tr("You must login again in order to continue.")).setType(DialogManager.INFO)
+                .show();
 
             if (ret != 0) {
                 hasCancelled = true;
                 break;
             }
 
-            new LoginWithMicrosoftDialog(this);
+            ProgressDialog<OauthDeviceCodeResponse> dialog = new ProgressDialog<>(
+                GetText.tr("Getting Login Code From Microsoft"), 0,
+                GetText.tr("Getting Login Code From Microsoft"),
+                "Aborting getting login code from Microsoft");
+            dialog.addThread(new Thread(() -> {
+                dialog.setReturnValue(MicrosoftAuthAPI.getDeviceCode());
+                dialog.close();
+            }));
+            dialog.start();
+
+            LoginWithMicrosoftDialog loginWithMicrosoftDialog = new LoginWithMicrosoftDialog(this);
+            loginWithMicrosoftDialog.setVisible(true);
         }
 
-        if (hasCancelled) {
-            return false;
-        }
-
-        return true;
+        return !hasCancelled;
     }
 
     public boolean ensureAccessTokenValid() {

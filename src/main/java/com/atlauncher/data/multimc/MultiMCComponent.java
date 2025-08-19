@@ -19,6 +19,8 @@ package com.atlauncher.data.multimc;
 
 import java.util.List;
 
+import javax.annotation.Nullable;
+
 public class MultiMCComponent {
     public String cachedName;
     public List<MultiMCRequire> cachedRequires;
@@ -26,6 +28,9 @@ public class MultiMCComponent {
     public Boolean cachedVolatile;
     public Boolean dependencyOnly;
     public Boolean important;
+
+    @Nullable
+    public Boolean disabled;
     public String uid;
     public String version;
 }

@@ -31,13 +31,13 @@ import org.mini2Dx.gettext.GetText;
 import com.atlauncher.builders.HTMLBuilder;
 import com.atlauncher.constants.Constants;
 import com.atlauncher.constants.UIConstants;
+import com.atlauncher.data.ftb.FTBPackManifest;
 import com.atlauncher.data.minecraft.VersionManifestVersion;
 import com.atlauncher.data.minecraft.VersionManifestVersionType;
-import com.atlauncher.data.modpacksch.ModpacksChPackManifest;
 import com.atlauncher.gui.card.NilCard;
 import com.atlauncher.gui.card.packbrowser.FTBPackCard;
 import com.atlauncher.managers.ConfigManager;
-import com.atlauncher.utils.ModpacksChApi;
+import com.atlauncher.utils.FTBApi;
 
 public class FTBPacksPanel extends PackBrowserPlatformPanel {
     GridBagConstraints gbc = new GridBagConstraints();
@@ -47,12 +47,12 @@ public class FTBPacksPanel extends PackBrowserPlatformPanel {
     @Override
     protected void loadPacks(JPanel contentPanel, String minecraftVersion, String category, String sort,
             boolean sortDescending, String search, int page) {
-        List<ModpacksChPackManifest> packs;
+        List<FTBPackManifest> packs;
 
         if (search == null || search.isEmpty()) {
-            packs = ModpacksChApi.getModPacks(page, sort);
+            packs = FTBApi.getModPacks(page, sort);
         } else {
-            packs = ModpacksChApi.searchModPacks(search, page);
+            packs = FTBApi.searchModPacks(search, page);
         }
 
         hasMorePages = packs != null && packs.size() == Constants.CURSEFORGE_PAGINATION_SIZE;
@@ -86,18 +86,18 @@ public class FTBPacksPanel extends PackBrowserPlatformPanel {
     @Override
     public void loadMorePacks(JPanel contentPanel, String minecraftVersion, String category, String sort,
             boolean sortDescending, String search, int page) {
-        List<ModpacksChPackManifest> packs;
+        List<FTBPackManifest> packs;
 
         if (search == null || search.isEmpty()) {
-            packs = ModpacksChApi.getModPacks(page, sort);
+            packs = FTBApi.getModPacks(page, sort);
         } else {
-            packs = ModpacksChApi.searchModPacks(search, page);
+            packs = FTBApi.searchModPacks(search, page);
         }
 
-        hasMorePages = packs != null && packs.size() == Constants.MODPACKS_CH_PAGINATION_SIZE;
+        hasMorePages = packs != null && packs.size() == Constants.FTB_PAGINATION_SIZE;
 
         if (packs != null) {
-            for (ModpacksChPackManifest pack : packs) {
+            for (FTBPackManifest pack : packs) {
                 contentPanel.add(new FTBPackCard(pack), gbc);
                 gbc.gridy++;
             }
@@ -111,7 +111,7 @@ public class FTBPacksPanel extends PackBrowserPlatformPanel {
 
     @Override
     public String getAnalyticsCategory() {
-        return "ModpacksChPack";
+        return "FTBPack";
     }
 
     @Override
@@ -185,15 +185,16 @@ public class FTBPacksPanel extends PackBrowserPlatformPanel {
         return hasMorePages;
     }
 
+    @Override
     public boolean supportsManualAdding() {
         return false;
     }
 
-    public void addById(String id) {
-    }
+    @Override
+    public void addById(String id) {}
 
     @Override
     public String getPlatformMessage() {
-        return ConfigManager.getConfigItem("platforms.modpacksch.message", null);
+        return ConfigManager.getConfigItem("platforms.ftb.message", null);
     }
 }

@@ -32,6 +32,7 @@ import javax.swing.border.TitledBorder;
 import org.mini2Dx.gettext.GetText;
 
 import com.atlauncher.App;
+import com.atlauncher.constants.UIConstants;
 import com.atlauncher.data.technic.TechnicModpackSlim;
 import com.atlauncher.evnt.listener.RelocalizationListener;
 import com.atlauncher.evnt.manager.RelocalizationManager;
@@ -40,11 +41,11 @@ import com.atlauncher.gui.dialogs.InstanceInstallerDialog;
 import com.atlauncher.managers.AccountManager;
 import com.atlauncher.managers.DialogManager;
 import com.atlauncher.network.Analytics;
+import com.atlauncher.network.analytics.AnalyticsEvent;
 import com.atlauncher.utils.OS;
 
-@SuppressWarnings("serial")
 public class TechnicPackCard extends JPanel implements RelocalizationListener {
-    private final JButton newInstanceButton = new JButton(GetText.tr("New Instance"));
+    private final JButton installButton = new JButton(GetText.tr("Install"));
     private final JButton websiteButton = new JButton(GetText.tr("Website"));
 
     public TechnicPackCard(final TechnicModpackSlim pack) {
@@ -66,19 +67,25 @@ public class TechnicPackCard extends JPanel implements RelocalizationListener {
         splitter.setRightComponent(actionsPanel);
         splitter.setEnabled(false);
 
-        JPanel buttonsPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 5, 2));
+        JPanel buttonsPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 5, 0));
+        buttonsPanel.setBorder(BorderFactory.createEmptyBorder(5, 0, 5, 0));
 
-        newInstanceButton.addActionListener(e -> {
+        installButton.addActionListener(e -> {
             if (AccountManager.getSelectedAccount() == null) {
                 DialogManager.okDialog().setTitle(GetText.tr("No Account Selected"))
                         .setContent(GetText.tr("Cannot create instance as you have no account selected."))
                         .setType(DialogManager.ERROR).show();
+
+                if (AccountManager.getAccounts().isEmpty()) {
+                    App.navigate(UIConstants.LAUNCHER_ACCOUNTS_TAB);
+                }
             } else {
-                Analytics.sendEvent(pack.name, "Install", "TechnicPack");
-                new InstanceInstallerDialog(pack);
+                Analytics.trackEvent(AnalyticsEvent.forPackInstall(pack));
+                InstanceInstallerDialog instanceInstallerDialog = new InstanceInstallerDialog(pack);
+                instanceInstallerDialog.setVisible(true);
             }
         });
-        buttonsPanel.add(newInstanceButton);
+        buttonsPanel.add(installButton);
 
         websiteButton.addActionListener(e -> OS.openWebBrowser(pack.url));
         buttonsPanel.add(websiteButton);
@@ -87,6 +94,7 @@ public class TechnicPackCard extends JPanel implements RelocalizationListener {
         descArea.setText(pack.name);
         descArea.setLineWrap(true);
         descArea.setEditable(false);
+        descArea.setFocusable(false);
         descArea.setHighlighter(null);
         descArea.setWrapStyleWord(true);
         descArea.setCaretPosition(0);
@@ -100,7 +108,7 @@ public class TechnicPackCard extends JPanel implements RelocalizationListener {
 
     @Override
     public void onRelocalization() {
-        newInstanceButton.setText(GetText.tr("New Instance"));
+        installButton.setText(GetText.tr("New Instance"));
         websiteButton.setText(GetText.tr("Website"));
     }
 }

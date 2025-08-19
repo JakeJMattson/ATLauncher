@@ -18,6 +18,8 @@
 package ui;
 
 import java.awt.Frame;
+import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.UUID;
@@ -29,10 +31,10 @@ import org.assertj.swing.finder.WindowFinder;
 import org.assertj.swing.fixture.FrameFixture;
 import org.assertj.swing.launcher.ApplicationLauncher;
 import org.assertj.swing.testing.AssertJSwingTestCaseTemplate;
-import org.junit.After;
-import org.junit.AfterClass;
-import org.junit.Before;
-import org.junit.BeforeClass;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.mockserver.integration.ClientAndServer;
 import org.mockserver.logging.MockServerLogger;
 import org.mockserver.socket.PortFactory;
@@ -53,15 +55,14 @@ public class AbstractUiTest extends AssertJSwingTestCaseTemplate {
 
     protected FrameFixture consoleFrame;
 
-    @BeforeClass
+    @BeforeAll
     public static final void setUpOnce() {
         FileUtils.createDirectory(workingDir);
     }
 
-    protected void preSetUp() {
-    }
+    protected void preSetUp() {}
 
-    @Before
+    @BeforeEach
     public final void setUp() {
         preSetUp();
 
@@ -78,6 +79,8 @@ public class AbstractUiTest extends AssertJSwingTestCaseTemplate {
 
         this.setupHttpMocks();
 
+        this.setupFiles();
+
         // start the application
         ApplicationLauncher.application(App.class)
                 .withArgs("--skip-setup-dialog", "--disable-analytics", "--disable-error-reporting",
@@ -88,6 +91,7 @@ public class AbstractUiTest extends AssertJSwingTestCaseTemplate {
 
         // get a reference to the main launcher frame
         frame = WindowFinder.findFrame(new GenericTypeMatcher<Frame>(Frame.class) {
+            @Override
             protected boolean isMatching(Frame frame) {
                 return Constants.LAUNCHER_NAME.equals(frame.getTitle()) && frame.isShowing();
             }
@@ -95,6 +99,7 @@ public class AbstractUiTest extends AssertJSwingTestCaseTemplate {
 
         // get a reference to the console frame
         consoleFrame = WindowFinder.findFrame(new GenericTypeMatcher<Frame>(Frame.class) {
+            @Override
             protected boolean isMatching(Frame frame) {
                 return (Constants.LAUNCHER_NAME + " Console").equals(frame.getTitle()) && frame.isShowing();
             }
@@ -115,6 +120,7 @@ public class AbstractUiTest extends AssertJSwingTestCaseTemplate {
         MockHelper.mockFileResponse(mockServer, "version.json");
         MockHelper.mockFileResponse(mockServer, "config.json");
         MockHelper.mockFileResponse(mockServer, "minecraft_versions.json");
+        MockHelper.mockFileResponse(mockServer, "java_runtimes.json");
         MockHelper.mockFileResponse(mockServer, "lwjgl.json");
 
         // files from Minecraft servers
@@ -122,10 +128,18 @@ public class AbstractUiTest extends AssertJSwingTestCaseTemplate {
                 "/v1/products/java-runtime/2ec0cc96c44e5a76b9c8b7c39df7210883d12871/all.json", "java_runtimes.json");
     }
 
-    protected void onSetUp() {
+    private void setupFiles() {
+        FileUtils.createDirectory(workingDir.resolve("configs"));
+        try {
+            Files.write(workingDir.resolve("configs/accounts.json"),
+                    Files.readAllBytes(Paths.get("src/test/resources/files/accounts.json")));
+        } catch (IOException e) {
+        }
     }
 
-    @After
+    protected void onSetUp() {}
+
+    @AfterEach
     public final void tearDown() {
         try {
             onTearDown();
@@ -135,11 +149,10 @@ public class AbstractUiTest extends AssertJSwingTestCaseTemplate {
         }
     }
 
-    @AfterClass
+    @AfterAll
     public static final void tearDownOnce() {
         FileUtils.deleteDirectory(workingDir);
     }
 
-    protected void onTearDown() {
-    }
+    protected void onTearDown() {}
 }

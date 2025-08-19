@@ -25,10 +25,11 @@ import com.atlauncher.annot.Json;
 import com.atlauncher.data.curseforge.CurseForgeFile;
 import com.atlauncher.data.curseforge.CurseForgeProject;
 import com.atlauncher.data.curseforge.pack.CurseForgeManifest;
+import com.atlauncher.data.ftb.FTBPackManifest;
+import com.atlauncher.data.ftb.FTBPackVersionManifest;
 import com.atlauncher.data.json.Java;
+import com.atlauncher.data.json.QuickPlay;
 import com.atlauncher.data.minecraft.loaders.LoaderVersion;
-import com.atlauncher.data.modpacksch.ModpacksChPackManifest;
-import com.atlauncher.data.modpacksch.ModpacksChPackVersionManifest;
 import com.atlauncher.data.modrinth.ModrinthProject;
 import com.atlauncher.data.modrinth.ModrinthVersion;
 import com.atlauncher.data.modrinth.pack.ModrinthModpackManifest;
@@ -60,14 +61,13 @@ public class InstanceLauncher {
     public Integer requiredMemory;
     public Integer requiredPermGen;
 
-    public Integer initialMemory;
     public Integer maximumMemory;
     public Integer permGen;
     public String javaPath;
     public String javaArguments;
     public String javaRuntimeOverride = null;
     public String account;
-    public Boolean enableDiscordIntegration = null;
+    public QuickPlay quickPlay = QuickPlay.getDefault();
     public Boolean useJavaProvidedByMinecraft = null;
     public Boolean disableLegacyLaunching = null;
     public Boolean enableCommands = null;
@@ -85,14 +85,18 @@ public class InstanceLauncher {
     public CurseForgeManifest curseForgeManifest;
 
     public CurseForgeProject curseForgeProject;
+    public String curseForgeProjectDescription = null;
     public CurseForgeFile curseForgeFile;
     public MultiMCManifest multiMCManifest;
     public ModrinthProject modrinthProject;
     public ModrinthVersion modrinthVersion;
     public ModrinthModpackManifest modrinthManifest;
-    public ModpacksChPackManifest modpacksChPackManifest;
-    public ModpacksChPackVersionManifest modpacksChPackVersionManifest;
+    @SerializedName(value = "ftbPackManifest", alternate = { "modpacksChPackManifest" })
+    public FTBPackManifest ftbPackManifest;
+    @SerializedName(value = "ftbPackVersionManifest", alternate = { "modpacksChPackVersionManifest" })
+    public FTBPackVersionManifest ftbPackVersionManifest;
     public TechnicModpack technicModpack;
+    public List<String> overridePaths = new ArrayList<>();
 
     public boolean checkForUpdates = true;
 

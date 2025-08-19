@@ -23,6 +23,7 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.image.BufferedImage;
 
+import javax.annotation.Nullable;
 import javax.swing.JMenuItem;
 import javax.swing.JPopupMenu;
 import javax.swing.JWindow;
@@ -30,20 +31,21 @@ import javax.swing.JWindow;
 import org.mini2Dx.gettext.GetText;
 
 import com.atlauncher.App;
+import com.atlauncher.network.Analytics;
 import com.atlauncher.utils.Utils;
 
 /**
- * The splash screen which shows when the launcher is started up and is loading
- * it's stuff.
+ * The splash screen which shows when the launcher is started up and is loading it's stuff.
  */
-@SuppressWarnings("serial")
 public class SplashScreen extends JWindow {
-    private static final BufferedImage img = Utils.getImage("splash-screen.png");
+    private final @Nullable BufferedImage img = Utils.getImage("splash-screen.png");
     private final ContextMenu CONTEXT_MENU = new ContextMenu();
 
     public SplashScreen() {
         this.setLayout(null);
-        this.setSize(img.getWidth(), img.getHeight());
+        if (img != null) {
+            this.setSize(img.getWidth(), img.getHeight());
+        }
         this.setLocationRelativeTo(null);
         this.addMouseListener(new MouseAdapter() {
             @Override
@@ -58,7 +60,9 @@ public class SplashScreen extends JWindow {
 
     @Override
     public void paint(Graphics g) {
-        g.drawImage(img, 0, 0, this.getWidth(), this.getHeight(), null);
+        if (img != null) {
+            g.drawImage(img, 0, 0, this.getWidth(), this.getHeight(), null);
+        }
     }
 
     /**
@@ -70,8 +74,7 @@ public class SplashScreen extends JWindow {
     }
 
     /**
-     * The context menu which is shows on right click for the splash screen image,
-     * giving a force quit option.
+     * The context menu which is shows on right click for the splash screen image, giving a force quit option.
      */
     private static final class ContextMenu extends JPopupMenu {
         public ContextMenu() {
@@ -87,8 +90,10 @@ public class SplashScreen extends JWindow {
                         SystemTray.getSystemTray().remove(App.trayIcon);
                     }
                 } catch (Exception ignored) {
+                    // ignored
                 }
 
+                Analytics.endSession();
                 System.exit(0);
             });
             add(forceQuit);

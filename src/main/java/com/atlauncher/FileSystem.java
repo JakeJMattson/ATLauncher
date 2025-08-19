@@ -33,11 +33,14 @@ import com.atlauncher.utils.Utils;
 public final class FileSystem {
     private static Path CACHED_USER_DOWNLOADS = null;
     public static final Path BASE_DIR = FileSystem.getCoreGracefully();
+    public static final Path JRE = BASE_DIR.resolve("jre");
     public static final Path LOGS = BASE_DIR.resolve("logs");
     public static final Path BACKUPS = BASE_DIR.resolve("backups");
     public static final Path CACHE = BASE_DIR.resolve("cache");
     public static final Path APOLLO_CACHE = CACHE.resolve("apolloCache");
+    public static final Path HTTP_CACHE = CACHE.resolve("http");
     public static final Path REMOTE_IMAGE_CACHE = CACHE.resolve("remote_image");
+    public static final Path FRACTURISER_SCANNED_HASHES = CACHE.resolve("fracturiser_scanned_hashes.json");
     public static final Path LOADERS = BASE_DIR.resolve("loaders");
     public static final Path RUNTIMES = BASE_DIR.resolve("runtimes");
     public static final Path MINECRAFT_RUNTIMES = RUNTIMES.resolve("minecraft");
@@ -66,7 +69,6 @@ public final class FileSystem {
     public static final Path TEMP = BASE_DIR.resolve("temp");
     public static final Path FAILED_DOWNLOADS = BASE_DIR.resolve("faileddownloads");
 
-    public static final Path USER_DATA = CONFIGS.resolve("userdata");
     public static final Path LAUNCHER_CONFIG = CONFIGS.resolve(Constants.LAUNCHER_NAME + ".conf");
     public static final Path SETTINGS = CONFIGS.resolve(Constants.LAUNCHER_NAME + ".json");
     public static final Path ACCOUNTS = CONFIGS.resolve("accounts.json");
@@ -74,8 +76,6 @@ public final class FileSystem {
     /**
      * This will organise the file system. This will remove old folders, create
      * directories needed as well as remove old directories no longer needed.
-     *
-     * @throws IOException
      */
     public static void organise() throws IOException {
         deleteOldThings();
@@ -159,10 +159,10 @@ public final class FileSystem {
 
                 for (String line : output.split("\\r?\\n")) {
                     if (line.contains("REG_EXPAND_SZ")) {
-                        String downloadsFolderPath = line.substring(line.indexOf("REG_EXPAND_SZ") + 13).trim();
+                        Path downloadsFolderPath = Paths.get(line.substring(line.indexOf("REG_EXPAND_SZ") + 13).trim());
 
-                        if (Files.exists(Paths.get(downloadsFolderPath))) {
-                            CACHED_USER_DOWNLOADS = Paths.get(downloadsFolderPath);
+                        if (Files.exists(downloadsFolderPath)) {
+                            CACHED_USER_DOWNLOADS = downloadsFolderPath;
                             return CACHED_USER_DOWNLOADS;
                         }
                     }
@@ -205,12 +205,9 @@ public final class FileSystem {
         }
 
         try {
-            boolean needToMove = false;
+            boolean needToMove = !Files.exists(to) || (Files.exists(to) && !Files.isSameFile(from, to));
 
             // case sensitive file systems
-            if (!Files.exists(to) || (Files.exists(to) && !Files.isSameFile(from, to))) {
-                needToMove = true;
-            }
 
             // case insensitive file systems
             if (Files.exists(to) && Files.isSameFile(from, to)
@@ -234,6 +231,7 @@ public final class FileSystem {
 
         FileUtils.createDirectory(BACKUPS);
         FileUtils.createDirectory(CACHE);
+        FileUtils.createDirectory(HTTP_CACHE);
         FileUtils.createDirectory(REMOTE_IMAGE_CACHE);
         FileUtils.createDirectory(INSTANCES);
         FileUtils.createDirectory(LIBRARIES);

@@ -21,6 +21,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 import com.atlauncher.data.Instance;
+import com.atlauncher.managers.ConfigManager;
 import com.atlauncher.utils.Pair;
 
 public class LoaderVersion {
@@ -50,18 +51,31 @@ public class LoaderVersion {
         return this.type.equalsIgnoreCase("Fabric");
     }
 
+    public boolean isForge() {
+        return this.type.equalsIgnoreCase("Forge");
+    }
+
     public boolean isLegacyFabric() {
         return this.type.equalsIgnoreCase("LegacyFabric");
     }
 
-    public boolean isForge() {
-        return this.type.equalsIgnoreCase("Forge");
+    public boolean isNeoForge() {
+        return this.type.equalsIgnoreCase("NeoForge");
+    }
+
+    public boolean isPaper() {
+        return this.type.equalsIgnoreCase("Paper");
+    }
+
+    public boolean isPurpur() {
+        return this.type.equalsIgnoreCase("Purpur");
     }
 
     public boolean isQuilt() {
         return this.type.equalsIgnoreCase("Quilt");
     }
 
+    @Override
     public String toString() {
         if (this.recommended) {
             return this.version + " (Recommended)";
@@ -77,6 +91,18 @@ public class LoaderVersion {
 
         if (isLegacyFabric()) {
             return LoaderType.LEGACY_FABRIC;
+        }
+
+        if (isNeoForge()) {
+            return LoaderType.NEOFORGE;
+        }
+
+        if (isPaper()) {
+            return LoaderType.PAPER;
+        }
+
+        if (isPurpur()) {
+            return LoaderType.PURPUR;
         }
 
         if (isQuilt()) {
@@ -102,12 +128,21 @@ public class LoaderVersion {
     }
 
     public boolean shouldInstallServerScripts() {
-        // Forge 37 and newer (assumed) provide their own scripts for launching
-        if (this.isForge() && Integer.parseInt(this.version.substring(0, this.version.indexOf(".")), 10) >= 37) {
-            return false;
+        if (ConfigManager.getConfigItem("neoForgeServerStarterJar.enabled", false) == true) {
+            return true;
         }
 
-        return true;
+        return !this.isForgeLikeAndUsesServerStarterJar();
+    }
+
+    public boolean isForgeLikeAndUsesServerStarterJar() {
+        // Forge 37 and newer (assumed) provide their own scripts for launching
+        if (this.isForge() && Integer.parseInt(this.version.substring(0, this.version.indexOf(".")), 10) >= 37) {
+            return true;
+        }
+
+        // NeoForge also use their own run scripts
+        return this.isNeoForge();
     }
 
     public String getTypeForModrinthExport() {
@@ -119,26 +154,42 @@ public class LoaderVersion {
             return "quilt-loader";
         }
 
+        if (this.isNeoForge()) {
+            return "neoforge";
+        }
+
         return "forge";
     }
 
-    public Integer getAnalyticsValue() {
+    public String getAnalyticsValue() {
         if (isForge()) {
-            return 1;
+            return "Forge";
         }
 
         if (isFabric()) {
-            return 2;
-        }
-
-        if (isQuilt()) {
-            return 3;
+            return "Fabric";
         }
 
         if (isLegacyFabric()) {
-            return 4;
+            return "Legacy Fabric";
         }
 
-        return 0;
+        if (isNeoForge()) {
+            return "NeoForge";
+        }
+
+        if (isPaper()) {
+            return "Paper";
+        }
+
+        if (isPurpur()) {
+            return "Purpur";
+        }
+
+        if (isQuilt()) {
+            return "Quilt";
+        }
+
+        return "None";
     }
 }

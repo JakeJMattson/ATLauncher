@@ -44,6 +44,7 @@ import com.atlauncher.evnt.listener.RelocalizationListener;
 import com.atlauncher.evnt.manager.RelocalizationManager;
 import com.atlauncher.gui.components.JLabelWithHover;
 import com.atlauncher.network.Analytics;
+import com.atlauncher.network.analytics.AnalyticsEvent;
 import com.atlauncher.utils.OS;
 import com.atlauncher.utils.Utils;
 
@@ -93,7 +94,9 @@ public class SetupDialog extends JDialog implements RelocalizationListener {
         gbc.gridx++;
         gbc.insets = UIConstants.FIELD_INSETS;
         gbc.anchor = GridBagConstraints.BASELINE_LEADING;
-        language = new JComboBox<>(Language.locales.stream().filter(l -> l == Locale.ENGLISH || Language.languages.containsValue(l)).map(Locale::getDisplayName).toArray(String[]::new));
+        language = new JComboBox<>(
+                Language.locales.stream().filter(l -> l.equals(Locale.ENGLISH) || Language.languages.containsValue(l))
+                        .map(Locale::getDisplayName).toArray(String[]::new));
         language.setSelectedItem(Language.selected);
         language.addItemListener(e -> {
             if (e.getStateChange() == ItemEvent.SELECTED) {
@@ -110,7 +113,7 @@ public class SetupDialog extends JDialog implements RelocalizationListener {
         enableAnalyticsLabel = new JLabelWithHover(GetText.tr("Enable Anonymous Analytics") + "? ",
                 Utils.getIconImage(App.THEME.getIconPath("question")),
                 "<html>" + Utils.splitMultilinedString(GetText.tr(
-                        "The Launcher sends back anonymous analytics to Google Analytics in order to track what people do and don't use in the launcher. This helps determine what new features we implement in the future. All analytics are anonymous and contain no user/instance information in it at all. If you don't want to send anonymous analytics, you can disable this option."),
+                        "The Launcher sends back anonymous analytics to our own servers in a non identifying way in order to track what people do and don't use in the launcher. This helps determine what new features we implement in the future. All analytics are anonymous and contain no user/instance information in it at all. If you don't want to send anonymous analytics, you can disable this option."),
                         80, "<br/>") + "</html>");
         middle.add(enableAnalyticsLabel, gbc);
 
@@ -124,9 +127,7 @@ public class SetupDialog extends JDialog implements RelocalizationListener {
         enableAnalyticsPanel.add(enableAnalytics);
 
         JButton privacyPolicyButton = new JButton(GetText.tr("Open Privacy Policy"));
-        privacyPolicyButton.addActionListener(e -> {
-            OS.openWebBrowser("https://atlauncher.com/privacy-policy");
-        });
+        privacyPolicyButton.addActionListener(e -> OS.openWebBrowser("https://atlauncher.com/privacy-policy"));
         enableAnalyticsPanel.add(privacyPolicyButton);
 
         middle.add(enableAnalyticsPanel, gbc);
@@ -143,8 +144,7 @@ public class SetupDialog extends JDialog implements RelocalizationListener {
             App.settings.save();
 
             if (enableAnalytics.isSelected()) {
-                Analytics.startSession();
-                Analytics.sendEvent("SetupDialogComplete", "Launcher");
+                Analytics.trackEvent(AnalyticsEvent.simpleEvent("setup_dialog_complete"));
             }
 
             setVisible(false);
@@ -157,14 +157,13 @@ public class SetupDialog extends JDialog implements RelocalizationListener {
         add(bottom, BorderLayout.SOUTH);
 
         addWindowListener(new WindowAdapter() {
+            @Override
             public void windowClosing(WindowEvent arg0) {
                 System.exit(0);
             }
         });
 
         RelocalizationManager.addListener(this);
-
-        setVisible(true);
     }
 
     @Override
@@ -173,7 +172,7 @@ public class SetupDialog extends JDialog implements RelocalizationListener {
         languageLabel.setText(GetText.tr("Language") + ": ");
         enableAnalyticsLabel.setText(GetText.tr("Enable Anonymous Analytics") + "? ");
         enableAnalyticsLabel.setToolTipText("<html>" + Utils.splitMultilinedString(GetText.tr(
-                "The Launcher sends back anonymous analytics to Google Analytics in order to track what people do and don't use in the launcher. This helps determine what new features we implement in the future. All analytics are anonymous and contain no user/instance information in it at all. If you don't want to send anonymous analytics, you can disable this option."),
+                "The Launcher sends back anonymous analytics to our own servers in a non identifying way in order to track what people do and don't use in the launcher. This helps determine what new features we implement in the future. All analytics are anonymous and contain no user/instance information in it at all. If you don't want to send anonymous analytics, you can disable this option."),
                 80, "<br/>") + "</html>");
         saveButton.setText(GetText.tr("Save"));
     }

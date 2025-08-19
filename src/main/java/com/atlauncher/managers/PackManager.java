@@ -18,13 +18,15 @@
 package com.atlauncher.managers;
 
 import java.io.File;
-import java.io.FileNotFoundException;
-import java.io.FileReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
-import java.util.LinkedList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -32,10 +34,12 @@ import com.atlauncher.App;
 import com.atlauncher.Data;
 import com.atlauncher.FileSystem;
 import com.atlauncher.Gsons;
+import com.atlauncher.data.MicrosoftAccount;
 import com.atlauncher.data.Pack;
 import com.atlauncher.data.PackUsers;
 import com.atlauncher.exceptions.InvalidPack;
 import com.atlauncher.utils.Hashing;
+import com.google.common.hash.HashCode;
 import com.google.gson.JsonIOException;
 import com.google.gson.JsonSyntaxException;
 import com.google.gson.reflect.TypeToken;
@@ -52,12 +56,15 @@ public class PackManager {
         PerformanceManager.start();
         LogManager.debug("Loading packs");
         Data.PACKS.clear();
-        try {
-            java.lang.reflect.Type type = new TypeToken<List<Pack>>() {
-            }.getType();
-            Data.PACKS.addAll(Gsons.DEFAULT_ALT
-                    .fromJson(new FileReader(FileSystem.JSON.resolve("packsnew.json").toFile()), type));
-        } catch (JsonSyntaxException | FileNotFoundException | JsonIOException e) {
+        try (InputStreamReader fileReader = new InputStreamReader(
+                Files.newInputStream(FileSystem.JSON.resolve("packsnew.json")),
+                StandardCharsets.UTF_8)) {
+            java.lang.reflect.Type type = new TypeToken<List<Pack>>() {}.getType();
+            List<Pack> packs = Gsons.DEFAULT.fromJson(fileReader, type);
+            if (packs != null) {
+                Data.PACKS.addAll(packs);
+            }
+        } catch (JsonSyntaxException | IOException | JsonIOException e) {
             LogManager.logStackTrace(e);
         }
         LogManager.debug("Finished loading packs");
@@ -70,7 +77,7 @@ public class PackManager {
      * @return The Packs available in the Launcher sorted alphabetically
      */
     public static List<Pack> getPacksSortedAlphabetically(boolean isFeatured, boolean sortDescending) {
-        List<Pack> packs = new LinkedList<>();
+        List<Pack> packs = new ArrayList<>();
 
         for (Pack pack : Data.PACKS) {
             if (isFeatured) {
@@ -84,7 +91,7 @@ public class PackManager {
             }
         }
 
-        packs.sort(Comparator.comparing(p -> p.getName().toLowerCase()));
+        packs.sort(Comparator.comparing(p -> p.getName().toLowerCase(Locale.ENGLISH)));
 
         if (sortDescending) {
             Collections.reverse(packs);
@@ -99,7 +106,7 @@ public class PackManager {
      * @return The Packs available in the Launcher sorted by position
      */
     public static List<Pack> getPacksSortedPositionally(boolean isFeatured, boolean sortDescending) {
-        List<Pack> packs = new LinkedList<>();
+        List<Pack> packs = new ArrayList<>();
 
         for (Pack pack : Data.PACKS) {
             if (isFeatured) {
@@ -123,15 +130,17 @@ public class PackManager {
     }
 
     public static void setPackVisbility(Pack pack, boolean collapsed) {
-        if (pack != null && AccountManager.getSelectedAccount() != null) {
+        MicrosoftAccount selectedAccount = AccountManager.getSelectedAccount();
+
+        if (pack != null && selectedAccount != null) {
             if (collapsed) {
                 // Closed It
-                if (!AccountManager.getSelectedAccount().collapsedPacks.contains(pack.getName())) {
-                    AccountManager.getSelectedAccount().collapsedPacks.add(pack.getName());
+                if (!selectedAccount.collapsedPacks.contains(pack.getName())) {
+                    selectedAccount.collapsedPacks.add(pack.getName());
                 }
             } else {
                 // Opened It
-                AccountManager.getSelectedAccount().collapsedPacks.remove(pack.getName());
+                selectedAccount.collapsedPacks.remove(pack.getName());
             }
             AccountManager.saveAccounts();
         }
@@ -249,12 +258,12 @@ public class PackManager {
     }
 
     public static void removePack(String packCode) {
-        for (String code : App.settings.addedPacks) {
-            if (Hashing.md5(code).equals(Hashing.toHashCode(packCode))) {
-                App.settings.addedPacks.remove(packCode);
-                App.settings.save();
-                App.launcher.refreshPacksBrowserPanel();
-            }
+        HashCode hashToRemove = Hashing.toHashCode(packCode);
+        boolean removed = App.settings.addedPacks.removeIf(code -> Hashing.md5(code).equals(hashToRemove));
+
+        if (removed) {
+            App.settings.save();
+            App.launcher.refreshPacksBrowserPanel();
         }
     }
 
@@ -266,12 +275,15 @@ public class PackManager {
         LogManager.debug("Loading users");
         List<PackUsers> packUsers = new ArrayList<>();
 
-        try {
-            java.lang.reflect.Type type = new TypeToken<List<PackUsers>>() {
-            }.getType();
-            packUsers.addAll(
-                    Gsons.DEFAULT_ALT.fromJson(new FileReader(FileSystem.JSON.resolve("users.json").toFile()), type));
-        } catch (JsonSyntaxException | FileNotFoundException | JsonIOException e) {
+        try (InputStreamReader fileReader = new InputStreamReader(
+                Files.newInputStream(FileSystem.JSON.resolve("users.json")),
+                StandardCharsets.UTF_8)) {
+            java.lang.reflect.Type type = new TypeToken<List<PackUsers>>() {}.getType();
+            List<PackUsers> users = Gsons.DEFAULT.fromJson(fileReader, type);
+            if (users != null) {
+                packUsers.addAll(users);
+            }
+        } catch (JsonSyntaxException | IOException | JsonIOException e) {
             LogManager.logStackTrace(e);
         }
 
@@ -287,7 +299,8 @@ public class PackManager {
         PerformanceManager.start();
         File[] files = FileSystem.IMAGES.toFile().listFiles();
 
-        Set<String> packImageFilenames = Data.PACKS.stream().map(p -> p.getSafeName().toLowerCase() + ".png")
+        Set<String> packImageFilenames = Data.PACKS.stream()
+                .map(p -> p.getSafeName().toLowerCase(Locale.ENGLISH) + ".png")
                 .collect(Collectors.toSet());
         packImageFilenames.add("defaultimage.png");
 

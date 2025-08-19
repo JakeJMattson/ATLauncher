@@ -26,6 +26,7 @@ import java.util.concurrent.ExecutionException;
 
 import javax.swing.JButton;
 import javax.swing.JPanel;
+import javax.swing.SwingUtilities;
 
 import org.mini2Dx.gettext.GetText;
 
@@ -38,11 +39,12 @@ import com.atlauncher.gui.dialogs.ProgressDialog;
 import com.atlauncher.managers.DialogManager;
 import com.atlauncher.managers.LogManager;
 import com.atlauncher.network.Analytics;
+import com.atlauncher.network.analytics.AnalyticsEvent;
 import com.atlauncher.thread.PasteUpload;
 
-@SuppressWarnings("serial")
 public class ConsoleBottomBar extends BottomBar implements RelocalizationListener {
 
+    public final JPanel leftSide = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 13));
     private final JButton clearButton = new JButton(GetText.tr("Clear"));
     private final JButton copyLogButton = new JButton(GetText.tr("Copy Log"));
     private final JButton uploadLogButton = new JButton(GetText.tr("Upload Log"));
@@ -51,7 +53,6 @@ public class ConsoleBottomBar extends BottomBar implements RelocalizationListene
     public ConsoleBottomBar() {
         this.addActionListeners(); // Setup Action Listeners
 
-        JPanel leftSide = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 13));
         leftSide.add(this.clearButton);
         leftSide.add(this.copyLogButton);
         leftSide.add(this.uploadLogButton);
@@ -64,16 +65,31 @@ public class ConsoleBottomBar extends BottomBar implements RelocalizationListene
         RelocalizationManager.addListener(this);
     }
 
+    public void hideBottomBarIconsIfNeeded() {
+        SwingUtilities.invokeLater(() -> {
+            int spaceLeft = getWidth() - leftSide.getWidth() - 20;
+
+            rightSide.setVisible(spaceLeft >= 40);
+            nodeCraftIcon.setVisible(spaceLeft >= 40);
+            discordIcon.setVisible(spaceLeft >= 80);
+            githubIcon.setVisible(spaceLeft >= 120);
+            redditIcon.setVisible(spaceLeft >= 160);
+            twitterIcon.setVisible(spaceLeft >= 200);
+            facebookIcon.setVisible(spaceLeft >= 240);
+        });
+    }
+
     /**
      * Sets up the action listeners on the buttons
      */
     private void addActionListeners() {
         clearButton.addActionListener(e -> {
+            Analytics.trackEvent(AnalyticsEvent.simpleEvent("console_clear"));
             App.console.clearConsole();
             LogManager.info("Console Cleared");
         });
         copyLogButton.addActionListener(e -> {
-            Analytics.sendEvent("CopyLog", "Launcher");
+            Analytics.trackEvent(AnalyticsEvent.simpleEvent("console_copy"));
             App.TOASTER.pop("Copied Log to clipboard");
             LogManager.info("Copied Log to clipboard");
             StringSelection text = new StringSelection(App.console.getLog());
@@ -103,7 +119,7 @@ public class ConsoleBottomBar extends BottomBar implements RelocalizationListene
             result = dialog.getReturnValue();
 
             if (result != null && result.contains(Constants.PASTE_CHECK_URL)) {
-                Analytics.sendEvent("UploadLog", "Launcher");
+                Analytics.trackEvent(AnalyticsEvent.simpleEvent("console_upload"));
                 App.TOASTER.pop("Log uploaded and link copied to clipboard");
                 LogManager.info("Log uploaded and link copied to clipboard: " + result);
                 StringSelection text = new StringSelection(result);
@@ -121,7 +137,7 @@ public class ConsoleBottomBar extends BottomBar implements RelocalizationListene
                             .build())
                     .setType(DialogManager.QUESTION).show();
             if (ret == DialogManager.YES_OPTION) {
-                Analytics.sendEvent("KillMinecraft", "Launcher");
+                Analytics.trackEvent(AnalyticsEvent.simpleEvent("console_kill_minecraft"));
                 App.launcher.killMinecraft();
                 killMinecraftButton.setVisible(false);
             }
@@ -130,14 +146,17 @@ public class ConsoleBottomBar extends BottomBar implements RelocalizationListene
 
     public void showKillMinecraft() {
         killMinecraftButton.setVisible(true);
+        hideBottomBarIconsIfNeeded();
     }
 
     public void hideKillMinecraft() {
         killMinecraftButton.setVisible(false);
+        hideBottomBarIconsIfNeeded();
     }
 
     public void setupLanguage() {
         this.onRelocalization();
+        hideBottomBarIconsIfNeeded();
     }
 
     @Override

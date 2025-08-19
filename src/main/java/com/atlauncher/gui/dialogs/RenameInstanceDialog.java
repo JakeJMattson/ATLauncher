@@ -43,7 +43,6 @@ import com.atlauncher.managers.LogManager;
 import com.atlauncher.network.Analytics;
 import com.atlauncher.utils.Utils;
 
-@SuppressWarnings("serial")
 public class RenameInstanceDialog extends JDialog {
 
     private JTextField instanceName;
@@ -71,12 +70,11 @@ public class RenameInstanceDialog extends JDialog {
         setupComponents();
 
         addWindowListener(new WindowAdapter() {
+            @Override
             public void windowClosing(WindowEvent arg0) {
                 close();
             }
         });
-
-        setVisible(true);
     }
 
     private void setupComponents() {
@@ -114,7 +112,7 @@ public class RenameInstanceDialog extends JDialog {
                                 GetText.tr("There is already an instance called {0}.<br/><br/>Rename it and try again.",
                                         instanceName.getText()))
                         .setType(DialogManager.ERROR).show();
-            } else if (instanceName.getText().replaceAll("[^A-Za-z0-9]", "").length() == 0) {
+            } else if (instanceName.getText().replaceAll("[^A-Za-z0-9]", "").isEmpty()) {
                 DialogManager.okDialog().setTitle(GetText.tr("Error"))
                         .setContent(
                                 new HTMLBuilder().center()
@@ -124,9 +122,7 @@ public class RenameInstanceDialog extends JDialog {
                                         .build())
                         .setType(DialogManager.ERROR).show();
             } else {
-                if (instance.rename(instanceName.getText())) {
-                    App.launcher.reloadInstancesPanel();
-                } else {
+                if (!instance.rename(instanceName.getText())) {
                     LogManager.error("Unknown Error Occurred While Renaming Instance!");
                     DialogManager.okDialog().setParent(RenameInstanceDialog.this).setTitle(GetText.tr("Error"))
                             .setContent(new HTMLBuilder().center().text(GetText.tr(

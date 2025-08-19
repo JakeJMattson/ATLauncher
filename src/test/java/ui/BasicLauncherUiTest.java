@@ -18,12 +18,10 @@
 package ui;
 
 import java.awt.Dialog;
-import java.awt.event.KeyEvent;
 import java.nio.file.Files;
 import java.util.concurrent.TimeUnit;
 
 import org.assertj.swing.core.GenericTypeMatcher;
-import org.assertj.swing.core.KeyPressInfo;
 import org.assertj.swing.core.matcher.JButtonMatcher;
 import org.assertj.swing.data.Index;
 import org.assertj.swing.finder.WindowFinder;
@@ -32,11 +30,11 @@ import org.assertj.swing.fixture.JButtonFixture;
 import org.assertj.swing.fixture.JComboBoxFixture;
 import org.assertj.swing.fixture.JPanelFixture;
 import org.assertj.swing.fixture.JTabbedPaneFixture;
-import org.assertj.swing.fixture.JTextComponentFixture;
 import org.assertj.swing.timing.Condition;
 import org.assertj.swing.timing.Pause;
 import org.assertj.swing.timing.Timeout;
-import org.junit.Test;
+import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.api.Test;
 
 import com.atlauncher.gui.card.InstanceCard;
 
@@ -44,6 +42,7 @@ import ui.mocks.MockHelper;
 
 public class BasicLauncherUiTest extends AbstractUiTest {
     @Test
+    @Tag("ui")
     public void testTheLauncherOpens() {
         this.frame.button("checkForUpdates").requireVisible();
 
@@ -57,48 +56,13 @@ public class BasicLauncherUiTest extends AbstractUiTest {
 
         JComboBoxFixture accountsTabAccountsComboBox = this.frame.comboBox("accountsTabAccountsComboBox");
         accountsTabAccountsComboBox.requireVisible();
-        accountsTabAccountsComboBox.requireItemCount(1);
-        accountsTabAccountsComboBox.requireSelection(0);
-
-        JButtonFixture loginButton = this.frame.button("leftButton");
-        loginButton.requireVisible().requireEnabled();
-
-        JTextComponentFixture usernameField = this.frame.textBox("usernameField");
-        usernameField.requireVisible().requireEditable();
-
-        JTextComponentFixture passwordField = this.frame.textBox("passwordField");
-        passwordField.requireVisible().requireEditable();
-
-        MockHelper.mockMojangLogin(mockServer, "POST", "authserver.mojang.com", "/authenticate", "login-success.json");
-        MockHelper.mockJson(mockServer, "GET", "sessionserver.mojang.com",
-                "/session/minecraft/profile/e50e5b562ca3c41f35631867a7cb14c5", "profile.json");
-        MockHelper.mockPng(mockServer, "GET", "textures.minecraft.net",
-                "/texture/3b60a1f6d562f52aaebbf1434f1de147933a3affe0e764fa49ea057536623cd3",
-                "3b60a1f6d562f52aaebbf1434f1de147933a3affe0e764fa49ea057536623cd3.png");
-
-        usernameField.setText("test@example.com");
-        usernameField.pressAndReleaseKey(KeyPressInfo.keyCode(KeyEvent.VK_M));
-        passwordField.setText("password");
-        passwordField.pressAndReleaseKey(KeyPressInfo.keyCode(KeyEvent.VK_D));
-
-        // login
-        loginButton.click();
-
-        DialogFixture loginDialog = WindowFinder.findDialog("loginDialog").using(robot());
-        loginDialog.requireVisible();
-
-        // give it 5 seconds
-        Pause.pause(5, TimeUnit.SECONDS);
-
-        // account was added, fields cleared
         accountsTabAccountsComboBox.requireItemCount(2);
-        usernameField.requireEmpty();
-        passwordField.requireEmpty();
+        accountsTabAccountsComboBox.requireSelection(0);
 
         // account selector now showing
         JComboBoxFixture accountSelector = this.frame.comboBox("accountSelector");
         accountSelector.requireVisible();
-        mainTabsFixture.selectTab("Vanilla Packs");
+        mainTabsFixture.selectTab("Create Pack");
         Pause.pause(1, TimeUnit.SECONDS);
 
         MockHelper.mockJson(mockServer, "GET", "download.nodecdn.net",
@@ -117,10 +81,10 @@ public class BasicLauncherUiTest extends AbstractUiTest {
         MockHelper.mockJar(mockServer, "GET", "launcher.mojang.com",
                 "/v1/objects/4addb91039ae452c5612f288bfe6ce925dac92c5/client.jar", "client-1-16-4.jar");
 
-        JPanelFixture vanillaPacksPanel = this.frame.panel("vanillaPacksPanel");
-        vanillaPacksPanel.requireVisible();
+        JPanelFixture createPackPanel = this.frame.panel("createPackPanel");
+        createPackPanel.requireVisible();
 
-        JButtonFixture createInstanceButton = vanillaPacksPanel.button(JButtonMatcher.withText("Create Instance"));
+        JButtonFixture createInstanceButton = createPackPanel.button(JButtonMatcher.withText("Create Instance"));
         createInstanceButton.requireVisible();
         createInstanceButton.click();
 
@@ -129,7 +93,7 @@ public class BasicLauncherUiTest extends AbstractUiTest {
             public boolean test() {
                 return Files.exists(workingDir.resolve("instances/Minecraft1164/instance.json"));
             }
-        }, Timeout.timeout(5, TimeUnit.MINUTES));
+        }, Timeout.timeout(30, TimeUnit.SECONDS));
 
         DialogFixture installSuccessDialog = WindowFinder.findDialog(new GenericTypeMatcher<Dialog>(Dialog.class) {
             @Override

@@ -20,27 +20,25 @@ package com.atlauncher.gui.tabs.instances;
 import java.awt.Dimension;
 import java.awt.event.KeyEvent;
 import java.awt.event.KeyListener;
-import java.util.regex.Pattern;
 
 import javax.swing.JTextField;
 
-import com.atlauncher.viewmodel.base.IInstancesTabViewModel;
 import org.mini2Dx.gettext.GetText;
 
-import com.atlauncher.gui.tabs.InstancesTab;
 import com.atlauncher.network.Analytics;
+import com.atlauncher.network.analytics.AnalyticsEvent;
+import com.atlauncher.viewmodel.base.IInstancesTabViewModel;
 import com.formdev.flatlaf.icons.FlatSearchIcon;
 
 public final class InstancesSearchField extends JTextField implements KeyListener {
-    private final InstancesTab parent;
     private final IInstancesTabViewModel viewModel;
 
-    public InstancesSearchField(final InstancesTab parent,final IInstancesTabViewModel viewModel) {
+    public InstancesSearchField(final IInstancesTabViewModel viewModel) {
         super(16);
-        this.parent = parent;
         this.viewModel = viewModel;
 
         this.setMaximumSize(new Dimension(190, 23));
+        setText(viewModel.getSearch());
         this.addKeyListener(this);
         this.putClientProperty("JTextField.placeholderText", GetText.tr("Search"));
         this.putClientProperty("JTextField.leadingIcon", new FlatSearchIcon());
@@ -51,9 +49,6 @@ public final class InstancesSearchField extends JTextField implements KeyListene
         });
     }
 
-    public Pattern getSearchPattern() {
-        return Pattern.compile(Pattern.quote(this.getText()), Pattern.CASE_INSENSITIVE);
-    }
 
     @Override
     public void keyTyped(KeyEvent e) {
@@ -66,8 +61,8 @@ public final class InstancesSearchField extends JTextField implements KeyListene
     @Override
     public void keyReleased(KeyEvent e) {
         if (e.getKeyChar() == KeyEvent.VK_ENTER) {
-            Analytics.sendEvent(this.getText(), "Search", "Instance");
-            this.viewModel.setSearch(this.getSearchPattern());
+            Analytics.trackEvent(AnalyticsEvent.forSearchEvent("instances", this.getText()));
+            this.viewModel.setSearch(this.getText());
         }
     }
 }

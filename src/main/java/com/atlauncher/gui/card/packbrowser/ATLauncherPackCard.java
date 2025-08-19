@@ -34,6 +34,7 @@ import org.mini2Dx.gettext.GetText;
 import com.atlauncher.App;
 import com.atlauncher.builders.HTMLBuilder;
 import com.atlauncher.constants.Constants;
+import com.atlauncher.constants.UIConstants;
 import com.atlauncher.data.Pack;
 import com.atlauncher.evnt.listener.RelocalizationListener;
 import com.atlauncher.evnt.manager.RelocalizationManager;
@@ -44,11 +45,11 @@ import com.atlauncher.managers.AccountManager;
 import com.atlauncher.managers.DialogManager;
 import com.atlauncher.managers.InstanceManager;
 import com.atlauncher.network.Analytics;
+import com.atlauncher.network.analytics.AnalyticsEvent;
 import com.atlauncher.utils.OS;
 
-@SuppressWarnings("serial")
 public class ATLauncherPackCard extends JPanel implements RelocalizationListener {
-    private final JButton newInstanceButton = new JButton(GetText.tr("New Instance"));
+    private final JButton installButton = new JButton(GetText.tr("Install"));
     private final JButton createServerButton = new JButton(GetText.tr("Create Server"));
     private final JButton discordInviteButton = new JButton("Discord");
     private final JButton supportButton = new JButton(GetText.tr("Support"));
@@ -56,12 +57,10 @@ public class ATLauncherPackCard extends JPanel implements RelocalizationListener
     private final JButton serversButton = new JButton(GetText.tr("Servers"));
     private final JButton modsButton = new JButton(GetText.tr("View Mods"));
     private final Pack pack;
-    private final boolean featured;
 
-    public ATLauncherPackCard(final Pack pack, final boolean featured) {
+    public ATLauncherPackCard(final Pack pack) {
         super();
         this.pack = pack;
-        this.featured = featured;
         setLayout(new BorderLayout());
         setBorder(BorderFactory.createTitledBorder(null, pack.name, TitledBorder.LEADING, TitledBorder.DEFAULT_POSITION,
                 App.THEME.getBoldFont().deriveFont(15f)));
@@ -83,7 +82,7 @@ public class ATLauncherPackCard extends JPanel implements RelocalizationListener
         as.setBottomComponent(bottom);
         as.setBorder(BorderFactory.createEmptyBorder(5, 0, 5, 0));
 
-        top.add(this.newInstanceButton);
+        top.add(this.installButton);
         top.add(this.createServerButton);
 
         if (pack.getDiscordInviteURL() != null) {
@@ -108,6 +107,7 @@ public class ATLauncherPackCard extends JPanel implements RelocalizationListener
         descArea.setText(pack.getDescription());
         descArea.setLineWrap(true);
         descArea.setEditable(false);
+        descArea.setFocusable(false);
         descArea.setHighlighter(null);
         descArea.setWrapStyleWord(true);
         descArea.setCaretPosition(0);
@@ -140,20 +140,25 @@ public class ATLauncherPackCard extends JPanel implements RelocalizationListener
     }
 
     private void addActionListeners() {
-        this.newInstanceButton.addActionListener(e -> {
+        this.installButton.addActionListener(e -> {
             if (AccountManager.getSelectedAccount() == null) {
                 DialogManager.okDialog().setTitle(GetText.tr("No Account Selected"))
                         .setContent(GetText.tr("Cannot create instance as you have no account selected."))
                         .setType(DialogManager.ERROR).show();
+
+                if (AccountManager.getAccounts().isEmpty()) {
+                    App.navigate(UIConstants.LAUNCHER_ACCOUNTS_TAB);
+                }
             } else {
-                Analytics.sendEvent(pack.getName(), "Install", featured ? "ATLauncherFeaturedPack" : "ATLauncherPack");
-                new InstanceInstallerDialog(pack);
+                Analytics.trackEvent(AnalyticsEvent.forPackInstall(pack));
+                InstanceInstallerDialog instanceInstallerDialog = new InstanceInstallerDialog(pack);
+                instanceInstallerDialog.setVisible(true);
             }
         });
 
         this.createServerButton.addActionListener(e -> {
             // user has no instances, they may not be aware this is not how to play
-            if (InstanceManager.getInstances().size() == 0) {
+            if (InstanceManager.getInstances().isEmpty()) {
                 int ret = DialogManager.yesNoDialog().setTitle(GetText.tr("Are you sure you want to create a server?"))
                         .setContent(new HTMLBuilder().center().text(GetText.tr(
                                 "Creating a server won't allow you play Minecraft, it's for letting others play together.<br/><br/>If you just want to play Minecraft, you don't want to create a server, and instead will want to create an instance.<br/><br/>Are you sure you want to create a server?"))
@@ -169,10 +174,14 @@ public class ATLauncherPackCard extends JPanel implements RelocalizationListener
                 DialogManager.okDialog().setTitle(GetText.tr("No Account Selected"))
                         .setContent(GetText.tr("Cannot create server as you have no account selected."))
                         .setType(DialogManager.ERROR).show();
+
+                if (AccountManager.getAccounts().isEmpty()) {
+                    App.navigate(UIConstants.LAUNCHER_ACCOUNTS_TAB);
+                }
             } else {
-                Analytics.sendEvent(pack.getName(), "ServerInstall",
-                        featured ? "ATLauncherFeaturedPack" : "ATLauncherPack");
-                new InstanceInstallerDialog(pack, true);
+                Analytics.trackEvent(AnalyticsEvent.forPackInstall(pack, true));
+                InstanceInstallerDialog instanceInstallerDialog = new InstanceInstallerDialog(pack, true);
+                instanceInstallerDialog.setVisible(true);
             }
         });
 
@@ -187,14 +196,15 @@ public class ATLauncherPackCard extends JPanel implements RelocalizationListener
                         Constants.SERVERS_LIST_PACK, pack.getSafeName())));
 
         this.modsButton.addActionListener(e -> {
-            Analytics.sendEvent(pack.getName(), "ViewMods", featured ? "ATLauncherFeaturedPack" : "ATLauncherPack");
-            new ViewModsDialog(pack).setVisible(true);
+            Analytics.trackEvent(AnalyticsEvent.forPackEvent("pack_view_mods", pack.getName(), "ATLauncher"));
+            ViewModsDialog viewModsDialog = new ViewModsDialog(pack);
+            viewModsDialog.setVisible(false);
         });
     }
 
     @Override
     public void onRelocalization() {
-        this.newInstanceButton.setText(GetText.tr("New Instance"));
+        this.installButton.setText(GetText.tr("New Instance"));
         this.createServerButton.setText(GetText.tr("Create Server"));
         this.supportButton.setText(GetText.tr("Support"));
         this.websiteButton.setText(GetText.tr("Website"));

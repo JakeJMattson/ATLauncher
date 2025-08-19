@@ -21,8 +21,18 @@ import com.google.gson.annotations.SerializedName;
 
 public enum ModPlatform {
     @SerializedName("CurseForge")
-    CURSEFORGE,
+    CURSEFORGE {
+        @Override
+        public String toString() {
+            return "CurseForge";
+        }
+    },
 
     @SerializedName("Modrinth")
-    MODRINTH
+    MODRINTH {
+        @Override
+        public String toString() {
+            return "Modrinth";
+        }
+    }
 }

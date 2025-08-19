@@ -24,10 +24,9 @@ import org.mini2Dx.gettext.GetText;
 import com.atlauncher.builders.HTMLBuilder;
 import com.atlauncher.managers.DialogManager;
 
-@SuppressWarnings("serial")
 public class LogClearerToolPanel extends AbstractToolPanel {
 
-    public LogClearerToolPanel(IToolsViewModel viewModel) {
+    public LogClearerToolPanel(ToolsViewModel viewModel) {
         super(GetText.tr("Log Clearer"));
 
         JLabel INFO_LABEL = new JLabel(new HTMLBuilder().center().split(70).text(GetText.tr(
@@ -40,7 +39,7 @@ public class LogClearerToolPanel extends AbstractToolPanel {
                 viewModel.clearLogs();
 
                 DialogManager.okDialog().setType(DialogManager.INFO).setTitle(GetText.tr("Success"))
-                    .setContent(GetText.tr("Successfully cleared the logs.")).show();
+                        .setContent(GetText.tr("Successfully cleared the logs.")).show();
             }
         });
     }

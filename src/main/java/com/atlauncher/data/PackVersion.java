@@ -18,9 +18,9 @@
 package com.atlauncher.data;
 
 import com.atlauncher.data.curseforge.CurseForgeFile;
+import com.atlauncher.data.ftb.FTBPackVersionType;
 import com.atlauncher.data.minecraft.VersionManifestVersion;
 import com.atlauncher.data.minecraft.VersionManifestVersionType;
-import com.atlauncher.data.modpacksch.ModpacksChPackVersionType;
 import com.atlauncher.data.modrinth.ModrinthVersion;
 
 public class PackVersion {
@@ -33,8 +33,8 @@ public class PackVersion {
     public boolean hasLoader = false;
     public boolean hasChoosableLoader = false;
     public String loaderType;
-    public transient Integer _modpacksChId = null;
-    public transient ModpacksChPackVersionType _modpacksChType = null;
+    public transient Integer _ftbId = null;
+    public transient FTBPackVersionType _ftbType = null;
     public transient CurseForgeFile _curseForgeFile = null;
     public transient ModrinthVersion _modrinthVersion = null;
     public transient boolean _technicRecommended = false;
@@ -44,6 +44,7 @@ public class PackVersion {
         return this.version.replaceAll("[^A-Za-z0-9]", "");
     }
 
+    @Override
     public String toString() {
         String versionString = getVersionString();
 
@@ -55,11 +56,19 @@ public class PackVersion {
             return versionString + " (Latest)";
         }
 
-        if (_modpacksChType == ModpacksChPackVersionType.BETA) {
+        if (_ftbType == FTBPackVersionType.BETA) {
             return versionString + " (Beta)";
         }
 
-        if (_modpacksChType == ModpacksChPackVersionType.ALPHA) {
+        if (_ftbType == FTBPackVersionType.ALPHA) {
+            return versionString + " (Alpha)";
+        }
+
+        if (_curseForgeFile != null && _curseForgeFile.isBetaType()) {
+            return versionString + " (Beta)";
+        }
+
+        if (_curseForgeFile != null && _curseForgeFile.isAlphaType()) {
             return versionString + " (Alpha)";
         }
 

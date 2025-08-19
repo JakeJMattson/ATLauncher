@@ -46,7 +46,7 @@ import com.atlauncher.App;
 import com.atlauncher.FileSystem;
 import com.atlauncher.builders.HTMLBuilder;
 import com.atlauncher.constants.UIConstants;
-import com.atlauncher.data.AbstractAccount;
+import com.atlauncher.data.MicrosoftAccount;
 import com.atlauncher.managers.DialogManager;
 import com.atlauncher.managers.LogManager;
 import com.atlauncher.network.Analytics;
@@ -54,20 +54,19 @@ import com.atlauncher.utils.ComboItem;
 import com.atlauncher.utils.MojangAPIUtils;
 import com.atlauncher.utils.Utils;
 
-@SuppressWarnings("serial")
 public class ChangeSkinDialog extends JDialog {
     private JTextField skinPath;
     private JComboBox<ComboItem<String>> skinType;
     private File selectedSkinFile;
     private JButton uploadButton;
 
-    private final AbstractAccount account;
+    private final MicrosoftAccount account;
 
-    public ChangeSkinDialog(AbstractAccount account) {
+    public ChangeSkinDialog(MicrosoftAccount account) {
         this(account, App.launcher.getParent());
     }
 
-    public ChangeSkinDialog(AbstractAccount account, Window parent) {
+    public ChangeSkinDialog(MicrosoftAccount account, Window parent) {
         super(parent, GetText.tr("Changing Skin"), ModalityType.DOCUMENT_MODAL);
 
         this.account = account;
@@ -84,12 +83,11 @@ public class ChangeSkinDialog extends JDialog {
         setupComponents();
 
         addWindowListener(new WindowAdapter() {
+            @Override
             public void windowClosing(WindowEvent arg0) {
                 close();
             }
         });
-
-        setVisible(true);
     }
 
     private void setupComponents() {
@@ -139,17 +137,16 @@ public class ChangeSkinDialog extends JDialog {
             if (chooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION) {
                 File selectedPath = chooser.getSelectedFile();
 
-                BufferedImage skinImage = null;
                 try {
-                    skinImage = ImageIO.read(selectedPath);
+                    BufferedImage skinImage = ImageIO.read(selectedPath);
 
                     if (skinImage.getWidth() != 64 || (skinImage.getHeight() != 64 && skinImage.getHeight() != 32)) {
                         DialogManager.okDialog().setTitle("Invalid Skin")
-                                .setContent(new HTMLBuilder().center()
-                                        .text(GetText.tr(
-                                                "The skin you chose is invalid. Please make sure you selected the right file and try again.<br/><br/>All skins must be 64x64 or 64x32 pixels."))
-                                        .build())
-                                .setType(DialogManager.ERROR).show();
+                            .setContent(new HTMLBuilder().center()
+                                .text(GetText.tr(
+                                    "The skin you chose is invalid. Please make sure you selected the right file and try again.<br/><br/>All skins must be 64x64 or 64x32 pixels."))
+                                .build())
+                            .setType(DialogManager.ERROR).show();
                         return;
                     }
 
@@ -192,22 +189,22 @@ public class ChangeSkinDialog extends JDialog {
         uploadButton = new JButton(GetText.tr("Upload"));
         uploadButton.addActionListener(e -> {
             ProgressDialog<Boolean> progressDialog = new ProgressDialog<>(GetText.tr("Updating Skin"), 0,
-                    GetText.tr("Updating Skin"));
+                GetText.tr("Updating Skin"));
             progressDialog.addThread(new Thread(() -> {
                 account.changeSkinPreCheck();
                 progressDialog.setReturnValue(MojangAPIUtils.uploadSkin(account, selectedSkinFile,
-                        ((ComboItem<String>) (skinType.getSelectedItem())).getValue()));
+                    ((ComboItem<String>) (skinType.getSelectedItem())).getValue()));
                 progressDialog.close();
             }));
             progressDialog.start();
 
-            if (!progressDialog.getReturnValue()) {
+            if (!Boolean.TRUE.equals(progressDialog.getReturnValue())) {
                 DialogManager.okDialog().setTitle("Error Updating Skin")
-                        .setContent(new HTMLBuilder().center()
-                                .text(GetText.tr(
-                                        "There was an error updating your skin.<br/><br/>Please check the logs and try again."))
-                                .build())
-                        .setType(DialogManager.ERROR).show();
+                    .setContent(new HTMLBuilder().center()
+                        .text(GetText.tr(
+                            "There was an error updating your skin.<br/><br/>Please check the logs and try again."))
+                        .build())
+                    .setType(DialogManager.ERROR).show();
                 return;
             }
 
@@ -220,9 +217,7 @@ public class ChangeSkinDialog extends JDialog {
         bottom.add(uploadButton);
 
         JButton cancelButton = new JButton(GetText.tr("Cancel"));
-        cancelButton.addActionListener(e -> {
-            close();
-        });
+        cancelButton.addActionListener(e -> close());
         bottom.add(cancelButton);
 
         add(top, BorderLayout.NORTH);

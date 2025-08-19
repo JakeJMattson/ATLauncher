@@ -19,7 +19,8 @@ package com.atlauncher.managers;
 
 import java.awt.Window;
 import java.io.File;
-import java.util.LinkedList;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Timer;
 import java.util.TimerTask;
@@ -28,9 +29,9 @@ import javax.swing.Icon;
 import javax.swing.JDialog;
 import javax.swing.JOptionPane;
 
-import com.atlauncher.App;
-
 import org.mini2Dx.gettext.GetText;
+
+import com.atlauncher.App;
 
 public final class DialogManager {
     public static final int OPTION_TYPE = 0;
@@ -57,7 +58,7 @@ public final class DialogManager {
     public Window parent;
     public String title;
     public Object content;
-    public List<String> options = new LinkedList<>();
+    public List<String> options = new ArrayList<>();
     public Icon icon = null;
     public int lookAndFeel = DialogManager.DEFAULT_OPTION;
     public String defaultOption = null;
@@ -165,7 +166,7 @@ public final class DialogManager {
     }
 
     public Object[] getOptions() {
-        if (this.options.size() == 0) {
+        if (this.options.isEmpty()) {
             return null;
         }
 
@@ -181,21 +182,10 @@ public final class DialogManager {
             return App.launcher.getParent();
         }
 
-        return null;
+        return JOptionPane.getRootFrame();
     }
 
     public int show() {
-        try {
-            return JOptionPane.showOptionDialog(this.getParent(), this.content, this.title, this.lookAndFeel, this.type,
-                    this.icon, this.getOptions(), this.defaultOption);
-        } catch (Exception e) {
-            LogManager.logStackTrace(e, false);
-        }
-
-        return -1;
-    }
-
-    public int showWithFileMonitoring(File firstFile, File secondFile, int size, int returnValue) {
         try {
             Object[] options = this.getOptions();
 
@@ -206,13 +196,62 @@ public final class DialogManager {
             jop.setComponentOrientation(this.getParent().getComponentOrientation());
 
             JDialog dialog = jop.createDialog(this.getParent(), this.title);
+            dialog.setAlwaysOnTop(true);
+            dialog.setVisible(true);
+
+            Object selectedValue = jop.getValue();
+
+            if (selectedValue == null) {
+                return CLOSED_OPTION;
+            }
+
+            if (options == null) {
+                if (selectedValue instanceof Integer) {
+                    return ((Integer) selectedValue).intValue();
+                }
+                return CLOSED_OPTION;
+            }
+
+            for (int counter = 0, maxCounter = options.length; counter < maxCounter; counter++) {
+                if (options[counter].equals(selectedValue)) {
+                    return counter;
+                }
+            }
+
+            return CLOSED_OPTION;
+        } catch (Exception e) {
+            LogManager.logStackTrace(e, false);
+        }
+
+        return CLOSED_OPTION;
+    }
+
+    public int showWithFileMonitoring(File firstFile, File secondFile, int size, int returnValue) {
+        if (secondFile != null) {
+            return showWithFileMonitoring(size, returnValue, firstFile, secondFile);
+        }
+
+        return showWithFileMonitoring(size, returnValue, firstFile);
+    }
+
+    public int showWithFileMonitoring(int size, int returnValue, File... files) {
+        try {
+            Object[] options = this.getOptions();
+
+            JOptionPane jop = new JOptionPane(this.content, this.type, this.lookAndFeel, this.icon, options,
+                    this.defaultOption);
+
+            jop.setInitialValue(this.defaultOption);
+            jop.setComponentOrientation(this.getParent().getComponentOrientation());
+
+            JDialog dialog = jop.createDialog(this.getParent(), this.title);
+            List<File> filesForMonitoring = Arrays.asList(files);
 
             Timer timer = new Timer();
             timer.schedule(new TimerTask() {
                 @Override
                 public void run() {
-                    if ((firstFile != null && (firstFile.exists() && firstFile.length() == size))
-                            || (secondFile != null && (secondFile.exists() && secondFile.length() == size))) {
+                    if (filesForMonitoring.stream().anyMatch(f -> f.exists() && f.length() == size)) {
                         timer.cancel();
                         jop.setValue(options[returnValue]);
                         dialog.dispose();
@@ -233,7 +272,7 @@ public final class DialogManager {
 
             if (options == null) {
                 if (selectedValue instanceof Integer) {
-                    return ((Integer) selectedValue).intValue();
+                    return (Integer) selectedValue;
                 }
                 return CLOSED_OPTION;
             }

@@ -33,6 +33,7 @@ import org.mini2Dx.gettext.GetText;
 
 import com.atlauncher.App;
 import com.atlauncher.builders.HTMLBuilder;
+import com.atlauncher.constants.UIConstants;
 import com.atlauncher.data.modrinth.ModrinthSearchHit;
 import com.atlauncher.evnt.listener.RelocalizationListener;
 import com.atlauncher.evnt.manager.RelocalizationManager;
@@ -42,11 +43,11 @@ import com.atlauncher.managers.AccountManager;
 import com.atlauncher.managers.DialogManager;
 import com.atlauncher.managers.InstanceManager;
 import com.atlauncher.network.Analytics;
+import com.atlauncher.network.analytics.AnalyticsEvent;
 import com.atlauncher.utils.OS;
 
-@SuppressWarnings("serial")
 public class ModrinthPackCard extends JPanel implements RelocalizationListener {
-    private final JButton newInstanceButton = new JButton(GetText.tr("New Instance"));
+    private final JButton installButton = new JButton(GetText.tr("Install"));
     private final JButton createServerButton = new JButton(GetText.tr("Create Server"));
     private final JButton websiteButton = new JButton(GetText.tr("Website"));
 
@@ -71,23 +72,29 @@ public class ModrinthPackCard extends JPanel implements RelocalizationListener {
         splitter.setRightComponent(actionsPanel);
         splitter.setEnabled(false);
 
-        JPanel buttonsPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 5, 2));
+        JPanel buttonsPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 5, 0));
+        buttonsPanel.setBorder(BorderFactory.createEmptyBorder(5, 0, 5, 0));
 
-        newInstanceButton.addActionListener(e -> {
+        installButton.addActionListener(e -> {
             if (AccountManager.getSelectedAccount() == null) {
                 DialogManager.okDialog().setTitle(GetText.tr("No Account Selected"))
                         .setContent(GetText.tr("Cannot create instance as you have no account selected."))
                         .setType(DialogManager.ERROR).show();
+
+                if (AccountManager.getAccounts().isEmpty()) {
+                    App.navigate(UIConstants.LAUNCHER_ACCOUNTS_TAB);
+                }
             } else {
-                Analytics.sendEvent(searchHit.title, "Install", "ModrinthPack");
-                new InstanceInstallerDialog(searchHit, false);
+                Analytics.trackEvent(AnalyticsEvent.forPackInstall(searchHit));
+                InstanceInstallerDialog instanceInstallerDialog = new InstanceInstallerDialog(searchHit, false);
+                instanceInstallerDialog.setVisible(true);
             }
         });
-        buttonsPanel.add(newInstanceButton);
+        buttonsPanel.add(installButton);
 
         createServerButton.addActionListener(e -> {
             // user has no instances, they may not be aware this is not how to play
-            if (InstanceManager.getInstances().size() == 0) {
+            if (InstanceManager.getInstances().isEmpty()) {
                 int ret = DialogManager.yesNoDialog().setTitle(GetText.tr("Are you sure you want to create a server?"))
                         .setContent(new HTMLBuilder().center().text(GetText.tr(
                                 "Creating a server won't allow you play Minecraft, it's for letting others play together.<br/><br/>If you just want to play Minecraft, you don't want to create a server, and instead will want to create an instance.<br/><br/>Are you sure you want to create a server?"))
@@ -103,9 +110,14 @@ public class ModrinthPackCard extends JPanel implements RelocalizationListener {
                 DialogManager.okDialog().setTitle(GetText.tr("No Account Selected"))
                         .setContent(GetText.tr("Cannot create server as you have no account selected."))
                         .setType(DialogManager.ERROR).show();
+
+                if (AccountManager.getAccounts().isEmpty()) {
+                    App.navigate(UIConstants.LAUNCHER_ACCOUNTS_TAB);
+                }
             } else {
-                Analytics.sendEvent(searchHit.title, "ServerInstall", "ModrinthPack");
-                new InstanceInstallerDialog(searchHit, true);
+                Analytics.trackEvent(AnalyticsEvent.forPackInstall(searchHit, true));
+                InstanceInstallerDialog instanceInstallerDialog = new InstanceInstallerDialog(searchHit, true);
+                instanceInstallerDialog.setVisible(true);
             }
         });
         buttonsPanel.add(createServerButton);
@@ -118,6 +130,7 @@ public class ModrinthPackCard extends JPanel implements RelocalizationListener {
         descArea.setText(searchHit.description);
         descArea.setLineWrap(true);
         descArea.setEditable(false);
+        descArea.setFocusable(false);
         descArea.setHighlighter(null);
         descArea.setWrapStyleWord(true);
         descArea.setCaretPosition(0);
@@ -131,7 +144,7 @@ public class ModrinthPackCard extends JPanel implements RelocalizationListener {
 
     @Override
     public void onRelocalization() {
-        newInstanceButton.setText(GetText.tr("New Instance"));
+        installButton.setText(GetText.tr("New Instance"));
         websiteButton.setText(GetText.tr("Website"));
     }
 }

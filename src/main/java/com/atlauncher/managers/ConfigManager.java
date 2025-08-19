@@ -18,11 +18,11 @@
 package com.atlauncher.managers;
 
 import java.io.BufferedReader;
-import java.io.File;
-import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Map;
 
@@ -48,7 +48,11 @@ public class ConfigManager {
             return getConfigItem(key, defaultValue, Data.CONFIG_OVERRIDES);
         }
 
-        return getConfigItem(key, defaultValue, Data.CONFIG);
+        if (hasConfigItem(key, Data.CONFIG)) {
+            return getConfigItem(key, defaultValue, Data.CONFIG);
+        }
+
+        return defaultValue;
     }
 
     private static boolean hasConfigItem(String key, Map<String, Object> source) {
@@ -114,12 +118,20 @@ public class ConfigManager {
             }
 
             if (keyParts.length == 2) {
+                if (!secondLevel.containsKey(keyParts[1])) {
+                    return defaultValue;
+                }
+
                 return (T) secondLevel.get(keyParts[1]);
             }
 
             Map<String, Object> thirdLevel = (Map<String, Object>) secondLevel.get(keyParts[1]);
 
             if (thirdLevel == null) {
+                return defaultValue;
+            }
+
+            if (!thirdLevel.containsKey(keyParts[2])) {
                 return defaultValue;
             }
 
@@ -141,9 +153,9 @@ public class ConfigManager {
         }.getType();
 
         try {
-            File fileDir = FileSystem.JSON.resolve("config.json").toFile();
+            Path fileDir = FileSystem.JSON.resolve("config.json");
             BufferedReader in = new BufferedReader(
-                    new InputStreamReader(new FileInputStream(fileDir), StandardCharsets.UTF_8));
+                    new InputStreamReader(Files.newInputStream(fileDir), StandardCharsets.UTF_8));
 
             Data.CONFIG = Gsons.DEFAULT.fromJson(in, type);
             in.close();
@@ -166,10 +178,10 @@ public class ConfigManager {
     }
 
     private static void afterConfigLoaded() {
-        if (!App.disableErrorReporting && ConfigManager.getConfigItem("errorReporting.enabled", true) == true) {
+        if (!App.disableErrorReporting && ConfigManager.getConfigItem("errorReporting.enabled", true)) {
             ErrorReporting.ignoredMessages.clear();
             ErrorReporting.ignoredMessages
-                    .addAll(ConfigManager.getConfigItem("errorReporting.ignoredMessages", new ArrayList<String>()));
+                    .addAll(ConfigManager.getConfigItem("errorReporting.ignoredMessages", new ArrayList<>()));
 
             // not initiated, so start it up
             if (!ErrorReporting.sentryInitialised) {
@@ -178,7 +190,7 @@ public class ConfigManager {
         }
 
         // error reporting disabled, but we have a client initated, so close it
-        if (ConfigManager.getConfigItem("errorReporting.enabled", true) == false && ErrorReporting.sentryInitialised) {
+        if (!ConfigManager.getConfigItem("errorReporting.enabled", true) && ErrorReporting.sentryInitialised) {
             ErrorReporting.disable();
         }
     }

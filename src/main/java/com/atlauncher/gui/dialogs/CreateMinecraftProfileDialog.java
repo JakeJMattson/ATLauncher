@@ -43,7 +43,6 @@ import com.atlauncher.network.Analytics;
 import com.atlauncher.utils.MojangAPIUtils;
 import com.atlauncher.utils.Utils;
 
-@SuppressWarnings("serial")
 public class CreateMinecraftProfileDialog extends JDialog {
     private final Pattern VALID_PROFILE_NAME = Pattern.compile("[a-zA-Z0-9_]{3,16}");
 
@@ -72,12 +71,11 @@ public class CreateMinecraftProfileDialog extends JDialog {
         setupComponents();
 
         addWindowListener(new WindowAdapter() {
+            @Override
             public void windowClosing(WindowEvent arg0) {
                 close();
             }
         });
-
-        setVisible(true);
     }
 
     private void setupComponents() {
@@ -110,14 +108,14 @@ public class CreateMinecraftProfileDialog extends JDialog {
         JButton createButton = new JButton(GetText.tr("Create"));
         createButton.addActionListener(e -> {
             ProgressDialog<Boolean> progressDialog = new ProgressDialog<>(GetText.tr("Creating Minecraft Profile"), 0,
-                    GetText.tr("Creating Minecraft Profile"));
+                GetText.tr("Creating Minecraft Profile"));
             progressDialog.addThread(new Thread(() -> {
                 if (!VALID_PROFILE_NAME.matcher(profileName.getText()).matches()) {
                     DialogManager.okDialog().setParent(CreateMinecraftProfileDialog.this).setTitle(GetText.tr("Error"))
-                            .setContent(
-                                    GetText.tr(
-                                            "Invalid profile name, it must contain only alphanumeric characters and underscore, and be 3 to 16 characters long."))
-                            .setType(DialogManager.ERROR).show();
+                        .setContent(
+                            GetText.tr(
+                                "Invalid profile name, it must contain only alphanumeric characters and underscore, and be 3 to 16 characters long."))
+                        .setType(DialogManager.ERROR).show();
                     progressDialog.setReturnValue(false);
                     progressDialog.close();
                     return;
@@ -125,10 +123,10 @@ public class CreateMinecraftProfileDialog extends JDialog {
 
                 if (!MojangAPIUtils.checkUsernameAvailable(accessToken, profileName.getText())) {
                     DialogManager.okDialog().setParent(CreateMinecraftProfileDialog.this).setTitle(GetText.tr("Error"))
-                            .setContent(
-                                    GetText.tr(
-                                            "Username is not available, please try another one."))
-                            .setType(DialogManager.ERROR).show();
+                        .setContent(
+                            GetText.tr(
+                                "Username is not available, please try another one."))
+                        .setType(DialogManager.ERROR).show();
                     progressDialog.setReturnValue(false);
                     progressDialog.close();
                     return;
@@ -137,10 +135,10 @@ public class CreateMinecraftProfileDialog extends JDialog {
                 if (!MojangAPIUtils.createMcProfile(accessToken, profileName.getText())) {
                     LogManager.error("Unknown Error Occurred While Creating Profile!");
                     DialogManager.okDialog().setParent(CreateMinecraftProfileDialog.this).setTitle(GetText.tr("Error"))
-                            .setContent(new HTMLBuilder().center().text(GetText.tr(
-                                    "An error occurred creating your profile.<br/><br/>Please check the console and try again."))
-                                    .build())
-                            .setType(DialogManager.ERROR).show();
+                        .setContent(new HTMLBuilder().center().text(GetText.tr(
+                                "An error occurred creating your profile.<br/><br/>Please check the console and try again."))
+                            .build())
+                        .setType(DialogManager.ERROR).show();
                     progressDialog.setReturnValue(false);
                     progressDialog.close();
                     return;
@@ -151,7 +149,7 @@ public class CreateMinecraftProfileDialog extends JDialog {
             }));
             progressDialog.start();
 
-            if (progressDialog.getReturnValue()) {
+            if (Boolean.TRUE.equals(progressDialog.getReturnValue())) {
                 close();
             }
 

@@ -50,13 +50,13 @@ import com.atlauncher.builders.HTMLBuilder;
 import com.atlauncher.constants.UIConstants;
 import com.atlauncher.data.json.Mod;
 import com.atlauncher.gui.layouts.WrapLayout;
+import com.atlauncher.managers.DialogManager;
 import com.atlauncher.network.Analytics;
 import com.atlauncher.utils.FileUtils;
 import com.atlauncher.utils.Hashing;
 import com.atlauncher.utils.OS;
 import com.atlauncher.utils.Utils;
 
-@SuppressWarnings("serial")
 public final class BrowserDownloadDialog extends JDialog {
     private final List<Mod> browserDownloadMods;
     public final List<Mod> modsDownloaded = new ArrayList<>();
@@ -81,8 +81,6 @@ public final class BrowserDownloadDialog extends JDialog {
         super(parent, GetText.tr("Browser Download Mods"), ModalityType.DOCUMENT_MODAL);
         this.browserDownloadMods = browserDownloadMods;
 
-        Analytics.sendScreenView("Browser Download Mods");
-
         this.setPreferredSize(new Dimension(680, 600));
         this.setMinimumSize(new Dimension(680, 600));
         this.setResizable(true);
@@ -93,6 +91,8 @@ public final class BrowserDownloadDialog extends JDialog {
         if (success) {
             return;
         }
+
+        Analytics.sendScreenView("Browser Download Mods");
 
         setupComponents();
 
@@ -120,15 +120,17 @@ public final class BrowserDownloadDialog extends JDialog {
         }, 5000, 5000);
     }
 
-    protected void checkForDownloadedMods(boolean allowReload) {
+    private void checkForDownloadedMods(boolean allowReload) {
         boolean reloadMainPanel = false;
         for (Mod mod : browserDownloadMods) {
-            Path downloadsPath = downloadPath.resolve(mod.file);
-            Path finalLocation = FileSystem.DOWNLOADS.resolve(mod.file);
-
             if (modsDownloaded.contains(mod)) {
                 continue;
             }
+
+            Path downloadsPath = downloadPath.resolve(mod.file);
+            Path downloadsPath2 = downloadPath.resolve(mod.file.replace(" ", "+"));
+            Path finalLocation = FileSystem.DOWNLOADS.resolve(mod.file);
+            Path finalLocation2 = FileSystem.DOWNLOADS.resolve(mod.file.replace(" ", "+"));
 
             // first check the user downloads folder (if not the same as final)
             if (!downloadsPath.equals(finalLocation) && Files.exists(downloadsPath)
@@ -146,6 +148,43 @@ public final class BrowserDownloadDialog extends JDialog {
                 if (mod.sha512 != null
                         && Hashing.sha512(downloadsPath).equals(Hashing.toHashCode(mod.sha512))) {
                     FileUtils.moveFile(downloadsPath, finalLocation, true);
+                }
+            }
+
+            // first check the user downloads folder with spaces replaced (if not the same
+            // as final)
+            if (!downloadsPath2.equals(finalLocation2) && Files.exists(downloadsPath2)
+                    && downloadsPath2.toFile().length() == mod.filesize) {
+                if (mod.md5 != null
+                        && Hashing.md5(downloadsPath2).equals(Hashing.toHashCode(mod.md5))) {
+                    FileUtils.moveFile(downloadsPath2, finalLocation, true);
+                }
+
+                if (mod.sha1 != null
+                        && Hashing.sha1(downloadsPath2).equals(Hashing.toHashCode(mod.sha1))) {
+                    FileUtils.moveFile(downloadsPath2, finalLocation, true);
+                }
+
+                if (mod.sha512 != null
+                        && Hashing.sha512(downloadsPath2).equals(Hashing.toHashCode(mod.sha512))) {
+                    FileUtils.moveFile(downloadsPath2, finalLocation, true);
+                }
+            }
+
+            if (Files.exists(finalLocation2)) {
+                if (mod.md5 != null
+                        && Hashing.md5(finalLocation2).equals(Hashing.toHashCode(mod.md5))) {
+                    FileUtils.moveFile(finalLocation2, finalLocation, true);
+                }
+
+                if (mod.sha1 != null
+                        && Hashing.sha1(finalLocation2).equals(Hashing.toHashCode(mod.sha1))) {
+                    FileUtils.moveFile(finalLocation2, finalLocation, true);
+                }
+
+                if (mod.sha512 != null
+                        && Hashing.sha512(finalLocation2).equals(Hashing.toHashCode(mod.sha512))) {
+                    FileUtils.moveFile(finalLocation2, finalLocation, true);
                 }
             }
 
@@ -168,7 +207,6 @@ public final class BrowserDownloadDialog extends JDialog {
                         && Hashing.sha512(finalLocation).equals(Hashing.toHashCode(mod.sha512))) {
                     modsDownloaded.add(mod);
                     reloadMainPanel = true;
-                    continue;
                 }
             }
         }
@@ -217,9 +255,7 @@ public final class BrowserDownloadDialog extends JDialog {
         this.bottomPanel.add(skipRemainingButton);
         this.bottomPanel.add(cancelInstallButton);
 
-        openFolderButton.addActionListener(l -> {
-            OS.openFileExplorer(downloadPath);
-        });
+        openFolderButton.addActionListener(l -> OS.openFileExplorer(downloadPath));
 
         openAllButton.addActionListener(l -> {
             for (Mod mod : browserDownloadMods) {
@@ -230,7 +266,15 @@ public final class BrowserDownloadDialog extends JDialog {
         });
 
         skipRemainingButton.addActionListener(l -> {
-            close();
+            int ret = DialogManager.yesNoDialog().setTitle(GetText.tr("Are You Sure?"))
+                    .setContent(new HTMLBuilder().center().text(GetText.tr(
+                            "Skipping the remaining downloads may cause issues launching the modpack.<br/><br/>Are you sure you want to do this?"))
+                            .build())
+                    .setType(DialogManager.WARNING).show();
+
+            if (ret == 0) {
+                close();
+            }
         });
 
         cancelInstallButton.addActionListener(l -> {
@@ -304,15 +348,11 @@ public final class BrowserDownloadDialog extends JDialog {
                 JPanel buttonPanel = new JPanel(new FlowLayout());
                 JButton openButton = new JButton(GetText.tr("Open"));
                 buttonPanel.add(openButton, gbc);
-                openButton.addActionListener(l -> {
-                    OS.openWebBrowser(mod.url);
-                });
+                openButton.addActionListener(l -> OS.openWebBrowser(mod.url));
 
                 JButton copyLinkButton = new JButton(GetText.tr("Copy Link"));
                 buttonPanel.add(copyLinkButton, gbc);
-                copyLinkButton.addActionListener(l -> {
-                    OS.copyToClipboard(mod.url);
-                });
+                copyLinkButton.addActionListener(l -> OS.copyToClipboard(mod.url));
                 this.mainPanel.add(buttonPanel, gbc);
             }
         }

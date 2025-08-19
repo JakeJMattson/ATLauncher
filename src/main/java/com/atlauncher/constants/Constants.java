@@ -18,19 +18,26 @@
 package com.atlauncher.constants;
 
 import java.io.BufferedReader;
+import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.stream.Collectors;
 
 import com.atlauncher.App;
 import com.atlauncher.data.LauncherVersion;
+import com.atlauncher.data.ScreenResolution;
 import com.atlauncher.utils.OS;
 
+@SuppressWarnings("MutablePublicArray")
 public class Constants {
     static {
-        String versionFromFile = new BufferedReader(
-                new InputStreamReader(App.class.getResourceAsStream("/version"), StandardCharsets.UTF_8)).lines()
-                .collect(Collectors.joining("")).trim();
+        String versionFromFile;
+        try (BufferedReader reader = new BufferedReader(
+                new InputStreamReader(App.class.getResourceAsStream("/version"), StandardCharsets.UTF_8))) {
+            versionFromFile = reader.lines().collect(Collectors.joining("")).trim();
+        } catch (IOException e) {
+            versionFromFile = "3.0.0.0";
+        }
         String[] versionParts = versionFromFile.split("\\.", 4);
 
         String stream = "Release";
@@ -50,28 +57,45 @@ public class Constants {
     public static final String LAUNCHER_NAME = "ATLauncher";
     public static final String LAUNCHER_WEBSITE = "https://atlauncher.com";
     public static final String DEFAULT_THEME_CLASS = "com.atlauncher.themes.Dark";
-    public static final String DISCORD_CLIENT_ID = "589393213723246592";
     public static final String GA_TRACKING_ID = "UA-88820616-7";
     public static final String CROWDIN_URL = "https://crowdin.com/project/atlauncher";
     public static final String SENTRY_DSN = "https://499c3bbc55cb434dad42a3ac670e2c91@sentry.io/1498519";
 
     // Launcher domains, endpoints, etc
-    public static String BASE_LAUNCHER_PROTOCOL = "https://";
-    public static String BASE_LAUNCHER_DOMAIN = "atlauncher.com";
-    public static String API_BASE_URL = BASE_LAUNCHER_PROTOCOL + "api." + BASE_LAUNCHER_DOMAIN + "/v1/launcher/";
-    public static String GRAPHQL_ENDPOINT = BASE_LAUNCHER_PROTOCOL + "api." + BASE_LAUNCHER_DOMAIN + "/v2/graphql";
-    public static String API_HOST = "api." + BASE_LAUNCHER_DOMAIN;
-    public static String PASTE_CHECK_URL = BASE_LAUNCHER_PROTOCOL + "paste." + BASE_LAUNCHER_DOMAIN;
-    public static String PASTE_HOST = "paste." + BASE_LAUNCHER_DOMAIN;
-    public static String SERVERS_LIST_PACK = BASE_LAUNCHER_PROTOCOL + BASE_LAUNCHER_DOMAIN + "/servers/list/pack";
-    public static String PASTE_API_URL = BASE_LAUNCHER_PROTOCOL + "paste." + BASE_LAUNCHER_DOMAIN + "/api/create";
+    private static final String DEFAULT_BASE_LAUNCHER_PROTOCOL = "https://";
+    private static final String DEFAULT_BASE_LAUNCHER_DOMAIN = "atlauncher.com";
+
+    public static String BASE_LAUNCHER_PROTOCOL = DEFAULT_BASE_LAUNCHER_PROTOCOL;
+    public static String BASE_LAUNCHER_DOMAIN = DEFAULT_BASE_LAUNCHER_DOMAIN;
+    public static String API_BASE_URL = DEFAULT_BASE_LAUNCHER_PROTOCOL + "api." + DEFAULT_BASE_LAUNCHER_DOMAIN
+            + "/v1/launcher/";
+    public static String GRAPHQL_ENDPOINT = DEFAULT_BASE_LAUNCHER_PROTOCOL + "api." + DEFAULT_BASE_LAUNCHER_DOMAIN
+            + "/v2/graphql";
+    public static String API_HOST = "api." + DEFAULT_BASE_LAUNCHER_DOMAIN;
+    public static String ANALYTICS_BASE_URL = DEFAULT_BASE_LAUNCHER_PROTOCOL + "analytics."
+            + DEFAULT_BASE_LAUNCHER_DOMAIN;
+    public static String PASTE_CHECK_URL = DEFAULT_BASE_LAUNCHER_PROTOCOL + "paste." + DEFAULT_BASE_LAUNCHER_DOMAIN;
+    public static String PASTE_HOST = "paste." + DEFAULT_BASE_LAUNCHER_DOMAIN;
+    public static String SERVERS_LIST_PACK = DEFAULT_BASE_LAUNCHER_PROTOCOL + DEFAULT_BASE_LAUNCHER_DOMAIN
+            + "/servers/list/pack";
+    public static String PASTE_API_URL = DEFAULT_BASE_LAUNCHER_PROTOCOL + "paste." + DEFAULT_BASE_LAUNCHER_DOMAIN
+            + "/api/create-v2";
 
     // CDN domains, endpoints, etc
-    public static String BASE_CDN_PROTOCOL = "https://";
-    public static String BASE_CDN_DOMAIN = "download.nodecdn.net";
-    public static String BASE_CDN_PATH = "/containers/atl";
-    public static String DOWNLOAD_SERVER = BASE_CDN_PROTOCOL + BASE_CDN_DOMAIN + BASE_CDN_PATH;
-    public static String DOWNLOAD_HOST = BASE_CDN_DOMAIN;
+    private static final String DEFAULT_BASE_CDN_PROTOCOL = "https://";
+    private static final String DEFAULT_BASE_CDN_DOMAIN = "download.nodecdn.net";
+    public static final String BASE_CDN_PATH = "/containers/atl";
+
+    public static String BASE_CDN_PROTOCOL = DEFAULT_BASE_CDN_PROTOCOL;
+    public static String BASE_CDN_DOMAIN = DEFAULT_BASE_CDN_DOMAIN;
+    public static String DOWNLOAD_SERVER = DEFAULT_BASE_CDN_PROTOCOL + DEFAULT_BASE_CDN_DOMAIN + BASE_CDN_PATH;
+    public static String DOWNLOAD_HOST = DEFAULT_BASE_CDN_DOMAIN;
+
+    // Mixpanel analytics
+    // if you fork or modify this launcher, you must not use this token and get your
+    // own
+    public static final String MIXPANEL_PROJECT_TOKEN = "3cb6581cb284c1a1b6e189fef3410495";
+    public static final String MIXPANEL_BASE_URL = "https://api.mixpanel.com";
 
     // CurseForge domains, endpoints, config, etc
     public static final String CURSEFORGE_CORE_API_URL = "https://api.curseforge.com/v1";
@@ -81,14 +105,20 @@ public class Constants {
     public static final String CURSEFORGE_CORE_API_HOST = "api.curseforge.com";
     public static final int CURSEFORGE_FORGE_MODLOADER_ID = 1;
     public static final int CURSEFORGE_FABRIC_MODLOADER_ID = 4;
+    public static final int CURSEFORGE_QUILT_MODLOADER_ID = 5;
+    public static final int CURSEFORGE_NEOFORGE_MODLOADER_ID = 6;
     public static final int CURSEFORGE_PAGINATION_SIZE = 20;
     public static final int CURSEFORGE_FABRIC_MOD_ID = 306612;
     public static final int CURSEFORGE_LEGACY_FABRIC_MOD_ID = 400281;
     public static final int CURSEFORGE_JUMPLOADER_MOD_ID = 361988;
+    public static final int CURSEFORGE_SINYTRA_CONNECTOR_MOD_ID = 890127;
+    public static final int CURSEFORGE_FORGIFIED_FABRIC_API_MOD_ID = 889079;
+    public static final int CURSEFORGE_PLUGINS_SECTION_ID = 5;
     public static final int CURSEFORGE_MODS_SECTION_ID = 6;
     public static final int CURSEFORGE_MODPACKS_SECTION_ID = 4471;
     public static final int CURSEFORGE_RESOURCE_PACKS_SECTION_ID = 12;
     public static final int CURSEFORGE_WORLDS_SECTION_ID = 17;
+    public static final int CURSEFORGE_SHADER_PACKS_SECTION_ID = 6552;
 
     // Modrinth domains, endpoints, config, etc
     public static final String MODRINTH_API_URL = "https://api.modrinth.com/v2";
@@ -96,12 +126,14 @@ public class Constants {
     public static final String MODRINTH_FABRIC_MOD_ID = "P7dR8mSH";
     public static final String MODRINTH_LEGACY_FABRIC_MOD_ID = "9CJED7xi";
     public static final String MODRINTH_QSL_MOD_ID = "qvIfYCYJ";
+    public static final String MODRINTH_SINYTRA_CONNECTOR_MOD_ID = "u58R1TMW";
+    public static final String MODRINTH_FORGIFIED_FABRIC_API_MOD_ID = "Aqlf1Shp";
     public static final int MODRINTH_PAGINATION_SIZE = 20;
 
-    // Modpacks.ch domains, endpoints, config, etc
-    public static final String MODPACKS_CH_API_URL = "https://api.modpacks.ch/public";
-    public static final String MODPACKS_CH_HOST = "api.modpacks.ch";
-    public static final int MODPACKS_CH_PAGINATION_SIZE = 20;
+    // FTB domains, endpoints, config, etc
+    public static final String FTB_API_URL = "https://api.feed-the-beast.com/v1/modpacks/public";
+    public static final String FTB_HOST = "api.feed-the-beast.com";
+    public static final int FTB_PAGINATION_SIZE = 20;
 
     // Technic domains, endpoints, config, etc
     public static final String TECHNIC_API_URL = "https://api.technicpack.net";
@@ -123,6 +155,10 @@ public class Constants {
     public static final String LEGACY_FABRIC_MAVEN = "https://maven.legacyfabric.net/";
     public static final String LEGACY_FABRIC_HOST = "maven.legacyfabric.net";
 
+    // NeoForge domains, endpoints, etc
+    public static final String NEOFORGE_MAVEN = "https://maven.neoforged.net/";
+    public static final String NEOFORGE_HOST = "maven.neoforged.net";
+
     // Quilt domains, endpoints, etc
     public static final String QUILT_MAVEN = "https://maven.quiltmc.org/repository/release/";
     public static final String QUILT_HOST = "maven.quiltmc.org";
@@ -135,6 +171,7 @@ public class Constants {
             + "/mc/game/version_manifest.json";
     public static final String MINECRAFT_JAVA_RUNTIME_URL = LAUNCHER_META_MINECRAFT
             + "/v1/products/java-runtime/2ec0cc96c44e5a76b9c8b7c39df7210883d12871/all.json";
+    public static final int MINECRAFT_DEFAULT_SERVER_PORT = 25565;
 
     // Misc
     public static final String LEGACY_JAVA_FIXER_URL = "https://cdn.atlcdn.net/legacyjavafixer-1.0.jar";
@@ -143,8 +180,18 @@ public class Constants {
             "dd-MM-yyyy", "MM-dd-yyyy", "yyyy-MM-dd" };
     // instance name, pack name, pack version, minecraft version
     public static final String[] INSTANCE_TITLE_FORMATS = { "%1$s (%2$s %3$s)", "%1$s", "%1$s (%4$s)", "%1$s (%3$s)" };
-    public static final String[] SCREEN_RESOLUTIONS = { "854x480", "1280x720", "1366x768", "1600x900", "1920x1080",
-            "2560x1440", "3440x1440", "3840x2160" };
+
+    public static final ScreenResolution[] SCREEN_RESOLUTIONS = {
+            new ScreenResolution(854, 480),
+            new ScreenResolution(1280, 720),
+            new ScreenResolution(1366, 768),
+            new ScreenResolution(1600, 900),
+            new ScreenResolution(1920, 1080),
+            new ScreenResolution(2560, 1440),
+            new ScreenResolution(3440, 1440),
+            new ScreenResolution(3840, 2160)
+    };
+
     public static final String DEFAULT_JAVA_PARAMETERS = "-XX:+UnlockExperimentalVMOptions -XX:+UseG1GC -XX:G1NewSizePercent=20 -XX:G1ReservePercent=20 -XX:MaxGCPauseMillis=50 -XX:G1HeapRegionSize=32M";
 
     // Custom for ATLauncher Microsoft login constants
@@ -154,14 +201,15 @@ public class Constants {
     public static final String MICROSOFT_LOGIN_REDIRECT_URL = "http://127.0.0.1:" + MICROSOFT_LOGIN_REDIRECT_PORT;
     public static final String MICROSOFT_LOGIN_REDIRECT_URL_ENCODED = "http%3A%2F%2F127.0.0.1%3A"
             + MICROSOFT_LOGIN_REDIRECT_PORT;
-    public static final String[] MICROSOFT_LOGIN_SCOPES = { "XboxLive.signin", "XboxLive.offline_access" };
+    public static final String[] MICROSOFT_LOGIN_SCOPES = { "XboxLive.signin", "offline_access" };
 
     // General Microsoft login constants
     public static final String MICROSOFT_LOGIN_URL = "https://login.live.com/oauth20_authorize.srf" + "?client_id="
-            + MICROSOFT_LOGIN_CLIENT_ID
-            + "&prompt=select_account&cobrandid=8058f65d-ce06-4c30-9559-473c9275a65d&response_type=code" + "&scope="
-            + String.join("%20", MICROSOFT_LOGIN_SCOPES) + "&redirect_uri=" + MICROSOFT_LOGIN_REDIRECT_URL_ENCODED;
-    public static final String MICROSOFT_AUTH_TOKEN_URL = "https://login.live.com/oauth20_token.srf";
+        + MICROSOFT_LOGIN_CLIENT_ID
+        + "&prompt=select_account&cobrandid=8058f65d-ce06-4c30-9559-473c9275a65d&response_type=code" + "&scope="
+        + String.join("%20", MICROSOFT_LOGIN_SCOPES) + "&redirect_uri=" + MICROSOFT_LOGIN_REDIRECT_URL_ENCODED;
+    public static final String MICROSOFT_DEVICE_CODE_URL = "https://login.microsoftonline.com/consumers/oauth2/v2.0/devicecode";
+    public static final String MICROSOFT_AUTH_TOKEN_URL = "https://login.microsoftonline.com/consumers/oauth2/v2.0/token";
     public static final String MICROSOFT_XBL_AUTH_TOKEN_URL = "https://user.auth.xboxlive.com/user/authenticate";
     public static final String MICROSOFT_XSTS_AUTH_TOKEN_URL = "https://xsts.auth.xboxlive.com/xsts/authorize";
     public static final String MICROSOFT_MINECRAFT_LOGIN_URL = "https://api.minecraftservices.com/launcher/login";
@@ -178,7 +226,7 @@ public class Constants {
         PASTE_CHECK_URL = BASE_LAUNCHER_PROTOCOL + "paste." + host;
         PASTE_HOST = "paste." + host;
         SERVERS_LIST_PACK = BASE_LAUNCHER_PROTOCOL + host + "/servers/list/pack";
-        PASTE_API_URL = BASE_LAUNCHER_PROTOCOL + "paste." + host + "/api/create";
+        PASTE_API_URL = BASE_LAUNCHER_PROTOCOL + "paste." + host + "/api/create-v2";
     }
 
     public static void setBaseCdnDomain(String baseCdnDomain) {
@@ -191,7 +239,6 @@ public class Constants {
     }
 
     public static void setBaseCdnPath(String baseCdnPath) {
-        BASE_CDN_PATH = baseCdnPath;
         DOWNLOAD_SERVER = BASE_CDN_PROTOCOL + BASE_CDN_DOMAIN + baseCdnPath;
     }
 }

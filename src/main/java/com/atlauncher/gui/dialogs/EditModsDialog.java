@@ -24,11 +24,13 @@ import java.awt.event.ItemEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.io.File;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -50,8 +52,12 @@ import com.atlauncher.App;
 import com.atlauncher.builders.HTMLBuilder;
 import com.atlauncher.data.DisableableMod;
 import com.atlauncher.data.Instance;
+import com.atlauncher.data.ModManagement;
+import com.atlauncher.data.Server;
 import com.atlauncher.data.curseforge.CurseForgeFingerprint;
 import com.atlauncher.data.curseforge.CurseForgeProject;
+import com.atlauncher.data.minecraft.FabricMod;
+import com.atlauncher.data.minecraft.MCMod;
 import com.atlauncher.data.modrinth.ModrinthProject;
 import com.atlauncher.data.modrinth.ModrinthVersion;
 import com.atlauncher.gui.components.ModsJCheckBox;
@@ -70,7 +76,7 @@ import com.atlauncher.utils.Utils;
 public class EditModsDialog extends JDialog {
     private static final long serialVersionUID = 7004414192679481818L;
 
-    public Instance instance;
+    public final ModManagement instanceOrServer;
 
     private JList<ModsJCheckBox> disabledModsPanel, enabledModsPanel;
     private JButton checkForUpdatesButton;
@@ -86,7 +92,21 @@ public class EditModsDialog extends JDialog {
         super(App.launcher.getParent(),
                 // #. {0} is the name of the instance
                 GetText.tr("Editing Mods For {0}", instance.launcher.name), ModalityType.DOCUMENT_MODAL);
-        this.instance = instance;
+        this.instanceOrServer = instance;
+
+        setup();
+    }
+
+    public EditModsDialog(Server server) {
+        super(App.launcher.getParent(),
+                // #. {0} is the name of the instance
+                GetText.tr("Editing Mods For {0}", server.name), ModalityType.DOCUMENT_MODAL);
+        this.instanceOrServer = server;
+
+        setup();
+    }
+
+    private void setup() {
         setSize(550, 450);
         setMinimumSize(new Dimension(550, 450));
         setLocationRelativeTo(App.launcher.getParent());
@@ -102,11 +122,9 @@ public class EditModsDialog extends JDialog {
 
         setupComponents();
 
-        instance.scanMissingMods();
+        instanceOrServer.scanMissingMods(this);
 
         loadMods();
-
-        setVisible(true);
     }
 
     private void setupComponents() {
@@ -199,20 +217,30 @@ public class EditModsDialog extends JDialog {
 
         JButton addButton = new JButton(GetText.tr("Add Mod"));
         addButton.addActionListener(e -> {
-            String[] modTypes = new String[] { "Mods Folder", "Resource Pack", "Shader Pack", "Inside Minecraft.jar" };
+            String[] modTypes;
+
+            if (instanceOrServer instanceof Instance) {
+                modTypes = new String[] { "Mods Folder", "Resource Pack", "Shader Pack", "Inside Minecraft.jar" };
+            } else if (instanceOrServer.getLoaderVersion() != null && (instanceOrServer.getLoaderVersion().isPaper()
+                    || instanceOrServer.getLoaderVersion().isPurpur())) {
+                modTypes = new String[] { "Plugins Folder" };
+            } else {
+                modTypes = new String[] { "Mods Folder" };
+            }
 
             FileChooserDialog fcd = new FileChooserDialog(this, GetText.tr("Add Mod"), GetText.tr("Mod"),
                     GetText.tr("Add"), GetText.tr("Type of Mod"), modTypes);
+            fcd.setVisible(true);
 
             if (fcd.wasClosed()) {
                 return;
             }
 
-            final ProgressDialog progressDialog = new ProgressDialog(GetText.tr("Copying Mods"), 0,
+            final ProgressDialog<Object> progressDialog = new ProgressDialog<>(GetText.tr("Copying Mods"), 0,
                     GetText.tr("Copying Mods"), this);
 
             progressDialog.addThread(new Thread(() -> {
-                ArrayList<File> files = fcd.getChosenFiles();
+                List<File> files = fcd.getChosenFiles();
                 if (files != null && !files.isEmpty()) {
                     boolean reload = false;
                     for (File file : files) {
@@ -244,8 +272,8 @@ public class EditModsDialog extends JDialog {
                         if (type != null) {
                             DisableableMod mod = DisableableMod.generateMod(file, type,
                                     App.settings.enableAddedModsByDefault);
-                            File copyTo = App.settings.enableAddedModsByDefault ? mod.getFile(instance)
-                                    : mod.getDisabledFile(instance);
+                            File copyTo = App.settings.enableAddedModsByDefault ? mod.getFile(instanceOrServer)
+                                    : mod.getDisabledFile(instanceOrServer);
 
                             if (copyTo.exists()) {
                                 LogManager.warn("The file " + file.getName() + " already exists. Not adding!");
@@ -257,7 +285,7 @@ public class EditModsDialog extends JDialog {
                             }
 
                             if (Utils.copyFile(file, copyTo, true)) {
-                                instance.launcher.mods.add(mod);
+                                instanceOrServer.addMod(mod);
                                 reload = true;
                             }
                         }
@@ -273,13 +301,15 @@ public class EditModsDialog extends JDialog {
         });
         bottomPanel.add(addButton);
 
-        if (instance.launcher.enableCurseForgeIntegration) {
-            if (ConfigManager.getConfigItem("platforms.curseforge.modsEnabled", true) == true
-                    || (ConfigManager.getConfigItem("platforms.modrinth.modsEnabled", true) == true
-                            && this.instance.launcher.loaderVersion != null)) {
+        if (instanceOrServer instanceof Server || (instanceOrServer instanceof Instance
+                && ((Instance) instanceOrServer).launcher.enableCurseForgeIntegration)) {
+            if (ConfigManager.getConfigItem("platforms.curseforge.modsEnabled", true)
+                    || (ConfigManager.getConfigItem("platforms.modrinth.modsEnabled", true)
+                            && instanceOrServer.getLoaderVersion() != null)) {
                 JButton browseMods = new JButton(GetText.tr("Browse Mods"));
                 browseMods.addActionListener(e -> {
-                    new AddModsDialog(this, instance);
+                    AddModsDialog addModsDialog = new AddModsDialog(this, instanceOrServer);
+                    addModsDialog.setVisible(true);
 
                     loadMods();
 
@@ -321,9 +351,9 @@ public class EditModsDialog extends JDialog {
     }
 
     private void loadMods() {
-        List<DisableableMod> mods = instance.launcher.mods.stream().filter(DisableableMod::wasSelected)
-                .filter(m -> !m.skipped)
-                .sorted(Comparator.comparing(m -> m.name)).collect(Collectors.toList());
+        List<DisableableMod> mods = instanceOrServer.getMods().stream().filter(DisableableMod::wasSelected)
+                .filter(m -> !m.skipped && m.type != com.atlauncher.data.Type.worlds)
+                .sorted(Comparator.comparing(m -> m.name, String.CASE_INSENSITIVE_ORDER)).collect(Collectors.toList());
         enabledMods = new ArrayList<>();
         disabledMods = new ArrayList<>();
         int dCount = 0;
@@ -366,7 +396,8 @@ public class EditModsDialog extends JDialog {
     }
 
     private void checkBoxesChanged() {
-        if (instance.launcher.enableCurseForgeIntegration) {
+        if (instanceOrServer instanceof Server || (instanceOrServer instanceof Instance
+                && ((Instance) instanceOrServer).launcher.enableCurseForgeIntegration)) {
             boolean hasSelectedACurseForgeOrModrinthMod = (enabledMods.stream().anyMatch(AbstractButton::isSelected)
                     && enabledMods.stream().filter(AbstractButton::isSelected)
                             .anyMatch(cb -> cb.getDisableableMod().isUpdatable()))
@@ -377,17 +408,17 @@ public class EditModsDialog extends JDialog {
             reinstallButton.setEnabled(hasSelectedACurseForgeOrModrinthMod);
         }
 
-        removeButton.setEnabled((disabledMods.size() != 0 && disabledMods.stream().anyMatch(AbstractButton::isSelected))
-                || (enabledMods.size() != 0 && enabledMods.stream().anyMatch(AbstractButton::isSelected)));
-        enableButton.setEnabled(disabledMods.size() != 0 && disabledMods.stream().anyMatch(AbstractButton::isSelected));
-        disableButton.setEnabled(enabledMods.size() != 0 && enabledMods.stream().anyMatch(AbstractButton::isSelected));
+        removeButton.setEnabled((!disabledMods.isEmpty() && disabledMods.stream().anyMatch(AbstractButton::isSelected))
+                || (!enabledMods.isEmpty() && enabledMods.stream().anyMatch(AbstractButton::isSelected)));
+        enableButton.setEnabled(!disabledMods.isEmpty() && disabledMods.stream().anyMatch(AbstractButton::isSelected));
+        disableButton.setEnabled(!enabledMods.isEmpty() && enabledMods.stream().anyMatch(AbstractButton::isSelected));
         refreshMetadataButton
-                .setEnabled(enabledMods.size() != 0 && enabledMods.stream().anyMatch(AbstractButton::isSelected));
+                .setEnabled(!enabledMods.isEmpty() && enabledMods.stream().anyMatch(AbstractButton::isSelected));
 
         selectAllEnabledModsCheckbox
-                .setSelected(enabledMods.size() != 0 && enabledMods.stream().allMatch(AbstractButton::isSelected));
+                .setSelected(!enabledMods.isEmpty() && enabledMods.stream().allMatch(AbstractButton::isSelected));
         selectAllDisabledModsCheckbox
-                .setSelected(disabledMods.size() != 0 && disabledMods.stream().allMatch(AbstractButton::isSelected));
+                .setSelected(!disabledMods.isEmpty() && disabledMods.stream().allMatch(AbstractButton::isSelected));
     }
 
     private void checkForUpdates() {
@@ -395,12 +426,12 @@ public class EditModsDialog extends JDialog {
         mods.addAll(enabledMods);
         mods.addAll(disabledMods);
 
-        ProgressDialog progressDialog = new ProgressDialog(GetText.tr("Checking For Updates"), mods.size(),
+        ProgressDialog<Void> progressDialog = new ProgressDialog<>(GetText.tr("Checking For Updates"), mods.size(),
                 GetText.tr("Checking For Updates"), this);
         progressDialog.addThread(new Thread(() -> {
             for (ModsJCheckBox mod : mods) {
                 if (mod.isSelected() && mod.getDisableableMod().isUpdatable()) {
-                    mod.getDisableableMod().checkForUpdate(progressDialog, instance);
+                    mod.getDisableableMod().checkForUpdate(progressDialog, instanceOrServer);
                 }
                 progressDialog.doneTask();
             }
@@ -410,7 +441,7 @@ public class EditModsDialog extends JDialog {
         progressDialog.start();
 
         DialogManager.okDialog().setTitle(GetText.tr("Checking For Updates Complete"))
-                .setContent(GetText.tr("The selected mods have been updated (if available).")).show();
+                .setContent(GetText.tr("The selected mods have been checked for updates.")).show();
 
         reloadPanels();
     }
@@ -418,11 +449,11 @@ public class EditModsDialog extends JDialog {
     private void reinstall() {
         ArrayList<ModsJCheckBox> mods = new ArrayList<>();
         mods.addAll(enabledMods);
-        mods.addAll(disabledMods);
+        mods.addAll(disabledMods); 
 
         for (ModsJCheckBox mod : mods) {
             if (mod.isSelected() && mod.getDisableableMod().isUpdatable()) {
-                mod.getDisableableMod().reinstall(this, instance);
+                mod.getDisableableMod().reinstall(this, instanceOrServer);
             }
         }
         reloadPanels();
@@ -432,7 +463,7 @@ public class EditModsDialog extends JDialog {
         ArrayList<ModsJCheckBox> mods = new ArrayList<>(disabledMods);
         for (ModsJCheckBox mod : mods) {
             if (mod.isSelected()) {
-                mod.getDisableableMod().enable(instance);
+                mod.getDisableableMod().enable(instanceOrServer);
             }
         }
         reloadPanels();
@@ -442,7 +473,7 @@ public class EditModsDialog extends JDialog {
         ArrayList<ModsJCheckBox> mods = new ArrayList<>(enabledMods);
         for (ModsJCheckBox mod : mods) {
             if (mod.isSelected()) {
-                mod.getDisableableMod().disable(instance);
+                mod.getDisableableMod().disable(instanceOrServer);
             }
         }
         reloadPanels();
@@ -460,11 +491,11 @@ public class EditModsDialog extends JDialog {
             ArrayList<ModsJCheckBox> mods = new ArrayList<>(enabledMods);
             for (ModsJCheckBox mod : mods) {
                 if (mod.isSelected()) {
-                    this.instance.launcher.mods.remove(mod.getDisableableMod());
+                    instanceOrServer.getMods().remove(mod.getDisableableMod());
                     FileUtils.delete(
                             (mod.getDisableableMod().isDisabled()
-                                    ? mod.getDisableableMod().getDisabledFile(this.instance)
-                                    : mod.getDisableableMod().getFile(this.instance)).toPath(),
+                                    ? mod.getDisableableMod().getDisabledFile(instanceOrServer)
+                                    : mod.getDisableableMod().getFile(instanceOrServer)).toPath(),
                             true);
                     enabledMods.remove(mod);
                 }
@@ -472,11 +503,11 @@ public class EditModsDialog extends JDialog {
             mods = new ArrayList<>(disabledMods);
             for (ModsJCheckBox mod : mods) {
                 if (mod.isSelected()) {
-                    this.instance.launcher.mods.remove(mod.getDisableableMod());
+                    instanceOrServer.getMods().remove(mod.getDisableableMod());
                     FileUtils.delete(
                             (mod.getDisableableMod().isDisabled()
-                                    ? mod.getDisableableMod().getDisabledFile(this.instance)
-                                    : mod.getDisableableMod().getFile(this.instance)).toPath(),
+                                    ? mod.getDisableableMod().getDisabledFile(instanceOrServer)
+                                    : mod.getDisableableMod().getFile(instanceOrServer)).toPath(),
                             true);
                     disabledMods.remove(mod);
                 }
@@ -504,18 +535,20 @@ public class EditModsDialog extends JDialog {
                 Map<Long, ModsJCheckBox> murmurHashes = new HashMap<>();
 
                 modsToRefresh.stream()
-                        .filter(mjc -> mjc.getDisableableMod().getFile(instance.ROOT, instance.id) != null)
+                        .filter(mjc -> mjc.getDisableableMod().getFile(instanceOrServer.getRoot(),
+                                instanceOrServer.getMinecraftVersion()) != null)
                         .forEach(mjc -> {
                             try {
                                 long hash = Hashing
-                                        .murmur(mjc.getDisableableMod().getFile(instance.ROOT, instance.id).toPath());
+                                        .murmur(mjc.getDisableableMod().getFile(instanceOrServer.getRoot(),
+                                                instanceOrServer.getMinecraftVersion()).toPath());
                                 murmurHashes.put(hash, mjc);
-                            } catch (Throwable t) {
+                            } catch (IOException t) {
                                 LogManager.logStackTrace(t);
                             }
                         });
 
-                if (murmurHashes.size() != 0) {
+                if (!murmurHashes.isEmpty()) {
                     CurseForgeFingerprint fingerprintResponse = CurseForgeApi
                             .checkFingerprints(murmurHashes.keySet().stream().toArray(Long[]::new));
 
@@ -533,21 +566,42 @@ public class EditModsDialog extends JDialog {
                                             DisableableMod dm = murmurHashes.get(foundMod.file.packageFingerprint)
                                                     .getDisableableMod();
 
-                                            // add CurseForge information
-                                            dm.curseForgeProjectId = foundMod.id;
-                                            dm.curseForgeFile = foundMod.file;
-                                            dm.curseForgeFileId = foundMod.file.id;
-
                                             CurseForgeProject curseForgeProject = foundProjects.get(foundMod.id);
 
-                                            if (curseForgeProject != null) {
+                                            if (curseForgeProject != null && curseForgeProject.status == 4) {
+                                                dm.curseForgeProjectId = foundMod.id;
+                                                dm.curseForgeFile = foundMod.file;
+                                                dm.curseForgeFileId = foundMod.file.id;
                                                 dm.curseForgeProject = curseForgeProject;
                                                 dm.name = curseForgeProject.name;
                                                 dm.description = curseForgeProject.summary;
+
+                                                LogManager.debug("Found matching mod from CurseForge called "
+                                                        + dm.curseForgeFile.displayName);
                                             }
 
-                                            LogManager.debug("Found matching mod from CurseForge called "
-                                                    + dm.curseForgeFile.displayName);
+                                            // reset if the file is not approved
+                                            if (curseForgeProject != null && curseForgeProject.status != 4) {
+                                                dm.curseForgeProjectId = null;
+                                                dm.curseForgeFile = null;
+                                                dm.curseForgeFileId = null;
+                                                dm.curseForgeProject = null;
+
+                                                File path = dm.getFile(instanceOrServer);
+                                                MCMod mcMod = Utils.getMCModForFile(path);
+                                                if (mcMod != null) {
+                                                    dm.name = Optional.ofNullable(mcMod.name)
+                                                            .orElse(path.getName());
+                                                    dm.description = mcMod.description;
+                                                } else {
+                                                    FabricMod fabricMod = Utils.getFabricModForFile(path);
+                                                    if (fabricMod != null) {
+                                                        dm.name = Optional.ofNullable(fabricMod.name)
+                                                                .orElse(path.getName());
+                                                        dm.description = fabricMod.description;
+                                                    }
+                                                }
+                                            }
                                         });
                             }
                         }
@@ -559,12 +613,16 @@ public class EditModsDialog extends JDialog {
                 Map<String, ModsJCheckBox> sha1Hashes = new HashMap<>();
 
                 modsToRefresh.stream()
-                        .filter(mjc -> mjc.getDisableableMod().getFile(instance.ROOT, instance.id) != null)
+                        .filter(mjc -> mjc.getDisableableMod().getFile(instanceOrServer.getRoot(),
+                                instanceOrServer.getMinecraftVersion()) != null)
                         .forEach(mjc -> {
                             try {
                                 sha1Hashes.put(
                                         Hashing.sha1(
-                                                mjc.getDisableableMod().getFile(instance.ROOT, instance.id).toPath())
+                                                mjc.getDisableableMod()
+                                                        .getFile(instanceOrServer.getRoot(),
+                                                                instanceOrServer.getMinecraftVersion())
+                                                        .toPath())
                                                 .toString(),
                                         mjc);
                             } catch (Throwable t) {
@@ -572,12 +630,12 @@ public class EditModsDialog extends JDialog {
                             }
                         });
 
-                if (sha1Hashes.size() != 0) {
+                if (!sha1Hashes.isEmpty()) {
                     Set<String> keys = sha1Hashes.keySet();
                     Map<String, ModrinthVersion> modrinthVersions = ModrinthApi
-                            .getVersionsFromSha1Hashes(keys.toArray(new String[keys.size()]));
+                            .getVersionsFromSha1Hashes(keys.toArray(new String[0]));
 
-                    if (modrinthVersions != null && modrinthVersions.size() != 0) {
+                    if (modrinthVersions != null && !modrinthVersions.isEmpty()) {
                         String[] projectIdsFound = modrinthVersions.values().stream().map(mv -> mv.projectId)
                                 .toArray(String[]::new);
 
@@ -610,7 +668,7 @@ public class EditModsDialog extends JDialog {
                 }
             }
 
-            instance.save();
+            instanceOrServer.save();
 
             dialog.close();
         }));
@@ -620,7 +678,7 @@ public class EditModsDialog extends JDialog {
     }
 
     public void reloadPanels() {
-        this.instance.save();
+        instanceOrServer.save();
 
         enabledModsPanel.removeAll();
         disabledModsPanel.removeAll();

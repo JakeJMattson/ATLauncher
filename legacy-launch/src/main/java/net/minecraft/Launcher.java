@@ -33,7 +33,7 @@ public class Launcher extends Applet implements AppletStub {
     private final Map<String, String> params;
 
     public Launcher(Applet applet) {
-        params = new TreeMap<String, String>();
+        params = new TreeMap<>();
 
         this.setLayout(new BorderLayout());
         this.add(applet, "Center");
@@ -110,6 +110,7 @@ public class Launcher extends Applet implements AppletStub {
         active = false;
     }
 
+    @Override
     public void destroy() {
         wrappedApplet.destroy();
     }
@@ -119,6 +120,7 @@ public class Launcher extends Applet implements AppletStub {
         try {
             return new URL("http://www.minecraft.net/game/");
         } catch (MalformedURLException ignored) {
+            // ignored
         }
 
         return null;
@@ -129,6 +131,7 @@ public class Launcher extends Applet implements AppletStub {
         try {
             return new URL("http://www.minecraft.net/game/");
         } catch (MalformedURLException ignored) {
+            // ignored
         }
 
         return null;
@@ -140,9 +143,9 @@ public class Launcher extends Applet implements AppletStub {
         wrappedApplet.setVisible(b);
     }
 
-    public void update(Graphics paramGraphics) {
-    }
+    @Override
+    public void update(Graphics paramGraphics) {}
 
-    public void paint(Graphics paramGraphics) {
-    }
+    @Override
+    public void paint(Graphics paramGraphics) {}
 }

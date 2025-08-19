@@ -33,7 +33,6 @@ import javax.swing.JPanel;
 
 import com.atlauncher.App;
 
-@SuppressWarnings("serial")
 public class FileTypeDialog extends JDialog {
 
     private final JComboBox<String> selector;
@@ -83,13 +82,12 @@ public class FileTypeDialog extends JDialog {
         add(bottom, BorderLayout.SOUTH);
 
         addWindowListener(new WindowAdapter() {
+            @Override
             public void windowClosing(WindowEvent arg0) {
                 closed = true;
                 close();
             }
         });
-
-        setVisible(true);
     }
 
     private void close() {

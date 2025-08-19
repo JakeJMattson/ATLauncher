@@ -21,16 +21,14 @@ import java.awt.BorderLayout;
 import java.awt.Cursor;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
-import java.awt.Toolkit;
-import java.awt.datatransfer.Clipboard;
-import java.awt.datatransfer.StringSelection;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
-import java.io.IOException;
+import java.nio.file.Path;
 import java.util.ArrayList;
 
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
+import javax.swing.JFileChooser;
 import javax.swing.JMenuItem;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
@@ -41,15 +39,11 @@ import javax.swing.JTextArea;
 import org.mini2Dx.gettext.GetText;
 
 import com.atlauncher.App;
-import com.atlauncher.Gsons;
 import com.atlauncher.builders.HTMLBuilder;
 import com.atlauncher.constants.Constants;
-import com.atlauncher.data.APIResponse;
 import com.atlauncher.data.BackupMode;
 import com.atlauncher.data.Instance;
 import com.atlauncher.data.minecraft.loaders.LoaderType;
-import com.atlauncher.evnt.listener.RelocalizationListener;
-import com.atlauncher.evnt.manager.RelocalizationManager;
 import com.atlauncher.gui.components.CollapsiblePanel;
 import com.atlauncher.gui.components.DropDownButton;
 import com.atlauncher.gui.components.ImagePanel;
@@ -62,18 +56,15 @@ import com.atlauncher.managers.AccountManager;
 import com.atlauncher.managers.ConfigManager;
 import com.atlauncher.managers.DialogManager;
 import com.atlauncher.managers.InstanceManager;
-import com.atlauncher.managers.LogManager;
 import com.atlauncher.network.Analytics;
+import com.atlauncher.network.analytics.AnalyticsEvent;
 import com.atlauncher.utils.OS;
-import com.atlauncher.utils.Utils;
-import com.google.gson.reflect.TypeToken;
 
 /**
  * <p/>
  * Class for displaying instances in the Instance Tab
  */
-@SuppressWarnings("serial")
-public class InstanceCard extends CollapsiblePanel implements RelocalizationListener {
+public class InstanceCard extends CollapsiblePanel {
     private final Instance instance;
     private final JTextArea descArea = new JTextArea();
     private final ImagePanel image;
@@ -84,8 +75,18 @@ public class InstanceCard extends CollapsiblePanel implements RelocalizationList
     private final JButton editButton = new JButton(GetText.tr("Edit Mods"));
     private final JButton serversButton = new JButton(GetText.tr("Servers"));
     private final JButton openWebsite = new JButton(GetText.tr("Open Website"));
-    private final JButton openButton = new JButton(GetText.tr("Open Folder"));
     private final JButton settingsButton = new JButton(GetText.tr("Settings"));
+
+    private final JPopupMenu openPopupMenu = new JPopupMenu();
+    private final JMenuItem openResourceMenuItem = new JMenuItem(GetText.tr("Open Resources"));
+    private final JMenuItem openInstanceJsonMenuItem = new JMenuItem(GetText.tr("Open instance.json"));
+    private final DropDownButton openButton = new DropDownButton(GetText.tr("Open Folder"), openPopupMenu, true,
+            new MouseAdapter() {
+                @Override
+                public void mousePressed(MouseEvent e) {
+                    OS.openFileExplorer(instance.getRoot());
+                }
+            });
 
     private final JPopupMenu playPopupMenu = new JPopupMenu();
     private final JMenuItem playOnlinePlayMenuItem = new JMenuItem(GetText.tr("Play Online"));
@@ -108,6 +109,8 @@ public class InstanceCard extends CollapsiblePanel implements RelocalizationList
     private final JMenuItem discordLinkMenuItem = new JMenuItem(GetText.tr("Discord"));
     private final JMenuItem supportLinkMenuItem = new JMenuItem(GetText.tr("Support"));
     private final JMenuItem websiteLinkMenuItem = new JMenuItem(GetText.tr("Website"));
+    private final JMenuItem wikiLinkMenuItem = new JMenuItem(GetText.tr("Wiki"));
+    private final JMenuItem sourceLinkMenuItem = new JMenuItem(GetText.tr("Source"));
     private final DropDownButton getHelpButton = new DropDownButton(GetText.tr("Get Help"), getHelpPopupMenu);
 
     private final JPopupMenu editInstancePopupMenu = new JPopupMenu();
@@ -136,6 +139,12 @@ public class InstanceCard extends CollapsiblePanel implements RelocalizationList
     // #. {0} is the loader (Forge/LegacyFabric/Quilt)
     private final JMenuItem removeLegacyFabricMenuItem = new JMenuItem(GetText.tr("Remove {0}", "Legacy Fabric"));
     // #. {0} is the loader (Forge/Fabric/Quilt)
+    private final JMenuItem addNeoForgeMenuItem = new JMenuItem(GetText.tr("Add {0}", "NeoForge"));
+    // #. {0} is the loader (Forge/Fabric/Quilt)
+    private final JMenuItem changeNeoForgeVersionMenuItem = new JMenuItem(GetText.tr("Change {0} Version", "NeoForge"));
+    // #. {0} is the loader (Forge/Fabric/Quilt)
+    private final JMenuItem removeNeoForgeMenuItem = new JMenuItem(GetText.tr("Remove {0}", "NeoForge"));
+    // #. {0} is the loader (Forge/Fabric/Quilt)
     private final JMenuItem addQuiltMenuItem = new JMenuItem(GetText.tr("Add {0}", "Quilt"));
     // #. {0} is the loader (Forge/Fabric/Quilt)
     private final JMenuItem changeQuiltVersionMenuItem = new JMenuItem(GetText.tr("Change {0} Version", "Quilt"));
@@ -144,10 +153,14 @@ public class InstanceCard extends CollapsiblePanel implements RelocalizationList
     private final DropDownButton editInstanceButton = new DropDownButton(GetText.tr("Edit Instance"),
             editInstancePopupMenu);
 
-    public InstanceCard(Instance instance) {
-        super(instance);
+    private final boolean hasUpdate;
+
+    public InstanceCard(Instance instance, boolean hasUpdate, String instanceTitleFormat) {
+        super(instance, instanceTitleFormat);
         this.instance = instance;
-        this.image = new ImagePanel(instance.getImage().getImage());
+        this.image = new ImagePanel(() -> instance.getImage().getImage());
+        this.hasUpdate = hasUpdate;
+
         JSplitPane splitter = new JSplitPane();
         splitter.setLeftComponent(this.image);
         JPanel rightPanel = new JPanel();
@@ -157,6 +170,7 @@ public class InstanceCard extends CollapsiblePanel implements RelocalizationList
         this.descArea.setText(instance.getPackDescription());
         this.descArea.setBorder(BorderFactory.createEmptyBorder(0, 5, 0, 5));
         this.descArea.setEditable(false);
+        this.descArea.setFocusable(false);
         this.descArea.setHighlighter(null);
         this.descArea.setLineWrap(true);
         this.descArea.setWrapStyleWord(true);
@@ -168,7 +182,7 @@ public class InstanceCard extends CollapsiblePanel implements RelocalizationList
                 public void mouseClicked(MouseEvent e) {
                     if (e.getClickCount() == 2) {
                         instance.startChangeDescription();
-                        descArea.setText(instance.launcher.description);
+                        descArea.setText(instance.getPackDescription());
                     }
                 }
             });
@@ -185,26 +199,22 @@ public class InstanceCard extends CollapsiblePanel implements RelocalizationList
 
         top.add(this.playButton);
         top.add(this.updateButton);
+        top.add(this.getHelpButton);
         top.add(this.editInstanceButton);
         top.add(this.backupButton);
         top.add(this.settingsButton);
 
         bottom.add(this.deleteButton);
         bottom.add(this.exportButton);
-        bottom.add(this.getHelpButton);
 
         setupPlayPopupMenus();
+        setupOpenPopupMenus();
         setupButtonPopupMenus();
 
         // check it can be exported
         this.exportButton.setVisible(instance.canBeExported());
 
-        // if not an ATLauncher pack, a system pack or has no urls, don't show the links
-        // button
-        if (instance.getPack() == null || instance.getPack().system || (instance.getPack().discordInviteURL == null
-                && instance.getPack().supportURL == null && instance.getPack().websiteURL == null)) {
-            this.getHelpButton.setVisible(false);
-        }
+        this.getHelpButton.setVisible(instance.showGetHelpButton());
 
         if (!instance.isUpdatable()) {
             this.updateButton.setVisible(instance.isUpdatable());
@@ -221,8 +231,8 @@ public class InstanceCard extends CollapsiblePanel implements RelocalizationList
         this.openWebsite.setVisible(instance.hasWebsite());
 
         if (instance.launcher.enableCurseForgeIntegration
-                && (ConfigManager.getConfigItem("platforms.curseforge.modsEnabled", true) == true
-                        || (ConfigManager.getConfigItem("platforms.modrinth.modsEnabled", true) == true
+                && (ConfigManager.getConfigItem("platforms.curseforge.modsEnabled", true)
+                        || (ConfigManager.getConfigItem("platforms.modrinth.modsEnabled", true)
                                 && this.instance.launcher.loaderVersion != null))) {
             bottom.add(this.addButton);
         }
@@ -244,9 +254,7 @@ public class InstanceCard extends CollapsiblePanel implements RelocalizationList
         this.getContentPane().setLayout(new BorderLayout());
         this.getContentPane().add(splitter, BorderLayout.CENTER);
 
-        RelocalizationManager.addListener(this);
-
-        if (!instance.hasUpdate()) {
+        if (!hasUpdate) {
             this.updateButton.setVisible(false);
         }
 
@@ -255,32 +263,53 @@ public class InstanceCard extends CollapsiblePanel implements RelocalizationList
     }
 
     private void setupPlayPopupMenus() {
-        playOnlinePlayMenuItem.addActionListener(e -> {
-            play(false);
-        });
+        playOnlinePlayMenuItem.addActionListener(e -> play(false));
         playPopupMenu.add(playOnlinePlayMenuItem);
 
-        playOfflinePlayMenuItem.addActionListener(e -> {
-            play(true);
-        });
+        playOfflinePlayMenuItem.addActionListener(e -> play(true));
         playPopupMenu.add(playOfflinePlayMenuItem);
     }
 
+    private void setupOpenPopupMenus() {
+        openResourceMenuItem.addActionListener(e -> {
+            DialogManager.okDialog().setTitle(GetText.tr("Reminder"))
+                    .setContent(GetText.tr("You may not distribute ANY resources."))
+                    .setType(DialogManager.WARNING).show();
+            OS.openFileExplorer(instance.getMinecraftJarLibraryPath());
+        });
+        openPopupMenu.add(openResourceMenuItem);
+
+        openInstanceJsonMenuItem.addActionListener(e -> {
+            OS.openFile(instance.getRoot().resolve("instance.json"));
+        });
+        openPopupMenu.add(openInstanceJsonMenuItem);
+    }
+
     private void setupButtonPopupMenus() {
-        if (instance.getPack() != null) {
-            if (instance.getPack().discordInviteURL != null) {
-                discordLinkMenuItem.addActionListener(e -> OS.openWebBrowser(instance.getPack().discordInviteURL));
+        if (instance.showGetHelpButton()) {
+            if (instance.getDiscordInviteUrl() != null) {
+                discordLinkMenuItem.addActionListener(e -> OS.openWebBrowser(instance.getDiscordInviteUrl()));
                 getHelpPopupMenu.add(discordLinkMenuItem);
             }
 
-            if (instance.getPack().supportURL != null) {
-                supportLinkMenuItem.addActionListener(e -> OS.openWebBrowser(instance.getPack().supportURL));
+            if (instance.getSupportUrl() != null) {
+                supportLinkMenuItem.addActionListener(e -> OS.openWebBrowser(instance.getSupportUrl()));
                 getHelpPopupMenu.add(supportLinkMenuItem);
             }
 
-            if (instance.getPack().websiteURL != null) {
-                websiteLinkMenuItem.addActionListener(e -> OS.openWebBrowser(instance.getPack().websiteURL));
+            if (instance.getWebsiteUrl() != null) {
+                websiteLinkMenuItem.addActionListener(e -> OS.openWebBrowser(instance.getWebsiteUrl()));
                 getHelpPopupMenu.add(websiteLinkMenuItem);
+            }
+
+            if (instance.getWikiUrl() != null) {
+                wikiLinkMenuItem.addActionListener(e -> OS.openWebBrowser(instance.getWikiUrl()));
+                getHelpPopupMenu.add(wikiLinkMenuItem);
+            }
+
+            if (instance.getSourceUrl() != null) {
+                sourceLinkMenuItem.addActionListener(e -> OS.openWebBrowser(instance.getSourceUrl()));
+                getHelpPopupMenu.add(sourceLinkMenuItem);
             }
         }
 
@@ -304,7 +333,7 @@ public class InstanceCard extends CollapsiblePanel implements RelocalizationList
         editInstancePopupMenu.add(changeImageMenuItem);
         editInstancePopupMenu.addSeparator();
 
-        if (ConfigManager.getConfigItem("loaders.fabric.enabled", true) == true
+        if (ConfigManager.getConfigItem("loaders.fabric.enabled", true)
                 && !ConfigManager.getConfigItem("loaders.fabric.disabledMinecraftVersions", new ArrayList<String>())
                         .contains(instance.id)) {
             editInstancePopupMenu.add(addFabricMenuItem);
@@ -312,7 +341,7 @@ public class InstanceCard extends CollapsiblePanel implements RelocalizationList
         }
         editInstancePopupMenu.add(removeFabricMenuItem);
 
-        if (ConfigManager.getConfigItem("loaders.forge.enabled", true) == true
+        if (ConfigManager.getConfigItem("loaders.forge.enabled", true)
                 && !ConfigManager.getConfigItem("loaders.forge.disabledMinecraftVersions", new ArrayList<String>())
                         .contains(instance.id)) {
             editInstancePopupMenu.add(addForgeMenuItem);
@@ -320,7 +349,7 @@ public class InstanceCard extends CollapsiblePanel implements RelocalizationList
         }
         editInstancePopupMenu.add(removeForgeMenuItem);
 
-        if (ConfigManager.getConfigItem("loaders.legacyfabric.enabled", true) == true
+        if (ConfigManager.getConfigItem("loaders.legacyfabric.enabled", true)
                 && !ConfigManager
                         .getConfigItem("loaders.legacyfabric.disabledMinecraftVersions", new ArrayList<String>())
                         .contains(instance.id)) {
@@ -329,7 +358,16 @@ public class InstanceCard extends CollapsiblePanel implements RelocalizationList
         }
         editInstancePopupMenu.add(removeLegacyFabricMenuItem);
 
-        if (ConfigManager.getConfigItem("loaders.quilt.enabled", false) == true
+        if (ConfigManager.getConfigItem("loaders.neoforge.enabled", true)
+                && !ConfigManager
+                        .getConfigItem("loaders.neoforge.disabledMinecraftVersions", new ArrayList<String>())
+                        .contains(instance.id)) {
+            editInstancePopupMenu.add(addNeoForgeMenuItem);
+            editInstancePopupMenu.add(changeNeoForgeVersionMenuItem);
+        }
+        editInstancePopupMenu.add(removeNeoForgeMenuItem);
+
+        if (ConfigManager.getConfigItem("loaders.quilt.enabled", false)
                 && !ConfigManager.getConfigItem("loaders.quilt.disabledMinecraftVersions", new ArrayList<String>())
                         .contains(instance.id)) {
             editInstancePopupMenu.add(addQuiltMenuItem);
@@ -364,6 +402,10 @@ public class InstanceCard extends CollapsiblePanel implements RelocalizationList
             instance.addLoader(LoaderType.LEGACY_FABRIC);
             setEditInstanceMenuItemVisbility();
         });
+        addNeoForgeMenuItem.addActionListener(e -> {
+            instance.addLoader(LoaderType.NEOFORGE);
+            setEditInstanceMenuItemVisbility();
+        });
         addQuiltMenuItem.addActionListener(e -> {
             instance.addLoader(LoaderType.QUILT);
             setEditInstanceMenuItemVisbility();
@@ -378,6 +420,10 @@ public class InstanceCard extends CollapsiblePanel implements RelocalizationList
             setEditInstanceMenuItemVisbility();
         });
         changeLegacyFabricVersionMenuItem.addActionListener(e -> {
+            instance.changeLoaderVersion();
+            setEditInstanceMenuItemVisbility();
+        });
+        changeNeoForgeVersionMenuItem.addActionListener(e -> {
             instance.changeLoaderVersion();
             setEditInstanceMenuItemVisbility();
         });
@@ -398,6 +444,10 @@ public class InstanceCard extends CollapsiblePanel implements RelocalizationList
             instance.removeLoader();
             setEditInstanceMenuItemVisbility();
         });
+        removeNeoForgeMenuItem.addActionListener(e -> {
+            instance.removeLoader();
+            setEditInstanceMenuItemVisbility();
+        });
         removeQuiltMenuItem.addActionListener(e -> {
             instance.removeLoader();
             setEditInstanceMenuItemVisbility();
@@ -410,6 +460,7 @@ public class InstanceCard extends CollapsiblePanel implements RelocalizationList
         addFabricMenuItem.setVisible(instance.launcher.loaderVersion == null);
         addForgeMenuItem.setVisible(instance.launcher.loaderVersion == null);
         addLegacyFabricMenuItem.setVisible(instance.launcher.loaderVersion == null);
+        addNeoForgeMenuItem.setVisible(instance.launcher.loaderVersion == null);
         addQuiltMenuItem.setVisible(instance.launcher.loaderVersion == null);
 
         changeFabricVersionMenuItem
@@ -419,6 +470,9 @@ public class InstanceCard extends CollapsiblePanel implements RelocalizationList
         changeLegacyFabricVersionMenuItem
                 .setVisible(
                         instance.launcher.loaderVersion != null && instance.launcher.loaderVersion.isLegacyFabric());
+        changeNeoForgeVersionMenuItem
+                .setVisible(
+                        instance.launcher.loaderVersion != null && instance.launcher.loaderVersion.isNeoForge());
         changeQuiltVersionMenuItem
                 .setVisible(instance.launcher.loaderVersion != null && instance.launcher.loaderVersion.isQuilt());
 
@@ -429,6 +483,9 @@ public class InstanceCard extends CollapsiblePanel implements RelocalizationList
         removeLegacyFabricMenuItem
                 .setVisible(
                         instance.launcher.loaderVersion != null && instance.launcher.loaderVersion.isLegacyFabric());
+        removeNeoForgeMenuItem
+                .setVisible(
+                        instance.launcher.loaderVersion != null && instance.launcher.loaderVersion.isNeoForge());
         removeQuiltMenuItem
                 .setVisible(instance.launcher.loaderVersion != null && instance.launcher.loaderVersion.isQuilt());
     }
@@ -442,31 +499,29 @@ public class InstanceCard extends CollapsiblePanel implements RelocalizationList
                 return;
             }
 
-            Analytics.sendEvent(instance.launcher.pack + " - " + instance.launcher.version, "Update",
-                    instance.getAnalyticsCategory());
+            Analytics.trackEvent(AnalyticsEvent.forInstanceEvent("instance_update", instance));
             instance.update();
         });
         this.addButton.addActionListener(e -> {
-            Analytics.sendEvent(instance.launcher.pack + " - " + instance.launcher.version, "AddMods",
-                    instance.getAnalyticsCategory());
-            new AddModsDialog(instance);
+            Analytics.trackEvent(AnalyticsEvent.forInstanceEvent("instance_add_mods", instance));
+            AddModsDialog addModsDialog = new AddModsDialog(instance);
+            addModsDialog.setVisible(true);
             exportButton.setVisible(instance.canBeExported());
         });
         this.editButton.addActionListener(e -> {
-            Analytics.sendEvent(instance.launcher.pack + " - " + instance.launcher.version, "EditMods",
-                    instance.getAnalyticsCategory());
-            new EditModsDialog(instance);
+            Analytics.trackEvent(AnalyticsEvent.forInstanceEvent("instance_edit_mods", instance));
+            EditModsDialog editModsDialog = new EditModsDialog(instance);
+            editModsDialog.setVisible(true);
             exportButton.setVisible(instance.canBeExported());
         });
         this.serversButton.addActionListener(e -> OS.openWebBrowser(
                 String.format("%s/%s?utm_source=launcher&utm_medium=button&utm_campaign=instance_v2_button",
                         Constants.SERVERS_LIST_PACK, instance.getSafePackName())));
         this.openWebsite.addActionListener(e -> OS.openWebBrowser(instance.getWebsiteUrl()));
-        this.openButton.addActionListener(e -> OS.openFileExplorer(instance.getRoot()));
         this.settingsButton.addActionListener(e -> {
-            Analytics.sendEvent(instance.launcher.pack + " - " + instance.launcher.version, "Settings",
-                    instance.getAnalyticsCategory());
-            new InstanceSettingsDialog(instance);
+            Analytics.trackEvent(AnalyticsEvent.forInstanceEvent("instance_settings", instance));
+            InstanceSettingsDialog instanceSettingsDialog = new InstanceSettingsDialog(instance);
+            instanceSettingsDialog.setVisible(true);
         });
         this.deleteButton.addActionListener(e -> {
             int ret = DialogManager.yesNoDialog(false).setTitle(GetText.tr("Delete Instance"))
@@ -475,9 +530,8 @@ public class InstanceCard extends CollapsiblePanel implements RelocalizationList
                     .setType(DialogManager.ERROR).show();
 
             if (ret == DialogManager.YES_OPTION) {
-                Analytics.sendEvent(instance.launcher.pack + " - " + instance.launcher.version, "Delete",
-                        instance.getAnalyticsCategory());
-                final ProgressDialog dialog = new ProgressDialog(GetText.tr("Deleting Instance"), 0,
+                Analytics.trackEvent(AnalyticsEvent.forInstanceEvent("instance_delete", instance));
+                final ProgressDialog<Object> dialog = new ProgressDialog<>(GetText.tr("Deleting Instance"), 0,
                         GetText.tr("Deleting Instance. Please wait..."), null, App.launcher.getParent());
                 dialog.addThread(new Thread(() -> {
                     InstanceManager.removeInstance(instance);
@@ -488,9 +542,9 @@ public class InstanceCard extends CollapsiblePanel implements RelocalizationList
             }
         });
         this.exportButton.addActionListener(e -> {
-            Analytics.sendEvent(instance.launcher.pack + " - " + instance.launcher.version, "Export",
-                    instance.getAnalyticsCategory());
-            new InstanceExportDialog(instance);
+            Analytics.trackEvent(AnalyticsEvent.forInstanceEvent("instance_export", instance));
+            InstanceExportDialog instanceExportDialog = new InstanceExportDialog(instance);
+            instanceExportDialog.setVisible(true);
         });
     }
 
@@ -512,7 +566,7 @@ public class InstanceCard extends CollapsiblePanel implements RelocalizationList
             return;
         }
 
-        if (instance.hasUpdate() && !instance.hasLatestUpdateBeenIgnored()) {
+        if (hasUpdate && !instance.hasLatestUpdateBeenIgnored()) {
             int ret = DialogManager.yesNoDialog().setTitle(GetText.tr("Update Available"))
                     .setContent(new HTMLBuilder().center()
                             .text(GetText.tr(
@@ -528,8 +582,7 @@ public class InstanceCard extends CollapsiblePanel implements RelocalizationList
                             .setContent(GetText.tr("Cannot update pack as you have no account selected."))
                             .setType(DialogManager.ERROR).show();
                 } else {
-                    Analytics.sendEvent(instance.launcher.pack + " - " + instance.launcher.version, "UpdateFromPlay",
-                            instance.getAnalyticsCategory());
+                    Analytics.trackEvent(AnalyticsEvent.forInstanceEvent("instance_update", instance));
                     instance.update();
                 }
             } else if (ret == 1 || ret == DialogManager.CLOSED_OPTION || ret == 2 || ret == 3) {
@@ -564,15 +617,11 @@ public class InstanceCard extends CollapsiblePanel implements RelocalizationList
                     JPopupMenu rightClickMenu = new JPopupMenu();
 
                     JMenuItem playOnlineButton = new JMenuItem(GetText.tr("Play Online"));
-                    playOnlineButton.addActionListener(l -> {
-                        play(false);
-                    });
+                    playOnlineButton.addActionListener(l -> play(false));
                     rightClickMenu.add(playOnlineButton);
 
                     JMenuItem playOfflineButton = new JMenuItem(GetText.tr("Play Offline"));
-                    playOfflineButton.addActionListener(l -> {
-                        play(true);
-                    });
+                    playOfflineButton.addActionListener(l -> play(true));
                     rightClickMenu.add(playOnlineButton);
 
                     if (instance.isUpdatable()) {
@@ -587,10 +636,27 @@ public class InstanceCard extends CollapsiblePanel implements RelocalizationList
                     JMenuItem updateItem = new JMenuItem(GetText.tr("Update"));
                     updateItem.addActionListener(l -> instance.update());
                     updateItem.setVisible(instance.isUpdatable());
-                    updateItem.setEnabled(instance.hasUpdate() && instance.launcher.isPlayable);
+                    updateItem.setEnabled(hasUpdate && instance.launcher.isPlayable);
                     rightClickMenu.add(updateItem);
 
                     rightClickMenu.addSeparator();
+
+                    JMenuItem supportPackItem = new JMenuItem(GetText.tr("Create Support Pack"));
+                    supportPackItem.addActionListener(l -> {
+                        JFileChooser chooser = new JFileChooser();
+                        chooser.setDialogTitle(GetText.tr("Choose location to save support pack"));
+                        chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+                        chooser.setAcceptAllFileFilterUsed(false);
+
+                        if (chooser.showSaveDialog(App.launcher.getParent()) == JFileChooser.APPROVE_OPTION) {
+                            Path finalPath = instance.createSupportPack(chooser.getSelectedFile().toPath());
+                            if (finalPath != null) {
+                                App.TOASTER.pop(GetText.tr("Support pack created"));
+                                OS.openFileExplorer(finalPath);
+                            }
+                        }
+                    });
+                    rightClickMenu.add(supportPackItem);
 
                     JMenuItem renameItem = new JMenuItem(GetText.tr("Rename"));
                     renameMenuItem.addActionListener(l -> instance.startRename());
@@ -612,43 +678,8 @@ public class InstanceCard extends CollapsiblePanel implements RelocalizationList
                     rightClickMenu.add(changeImageItem);
 
                     JMenuItem cloneItem = new JMenuItem(GetText.tr("Clone"));
-                    cloneItem.addActionListener(l -> {
-                        instance.startClone();
-                    });
+                    cloneItem.addActionListener(l -> instance.startClone());
                     rightClickMenu.add(cloneItem);
-
-                    JMenuItem shareCodeItem = new JMenuItem(GetText.tr("Share Code"));
-                    shareCodeItem.addActionListener(e1 -> {
-                        Analytics.sendEvent(instance.launcher.pack + " - " + instance.launcher.version, "MakeShareCode",
-                                instance.getAnalyticsCategory());
-                        try {
-                            java.lang.reflect.Type type = new TypeToken<APIResponse<String>>() {
-                            }.getType();
-
-                            APIResponse<String> response = Gsons.DEFAULT.fromJson(
-                                    Utils.sendAPICall("pack/" + instance.getSafePackName() + "/"
-                                            + instance.launcher.version + "/share-code", instance.getShareCodeData()),
-                                    type);
-
-                            if (response.wasError()) {
-                                App.TOASTER.pop(GetText.tr("Error getting share code."));
-                            } else {
-                                StringSelection text = new StringSelection(response.getData());
-                                Clipboard clipboard = Toolkit.getDefaultToolkit().getSystemClipboard();
-                                clipboard.setContents(text, null);
-
-                                App.TOASTER.pop(GetText.tr("Share code copied to clipboard"));
-                                LogManager.info("Share code copied to clipboard");
-                            }
-                        } catch (IOException ex) {
-                            LogManager.logStackTrace("API call failed", ex);
-                        }
-                    });
-                    shareCodeItem.setVisible((instance.getPack() != null && !instance.getPack().system)
-                            && !instance.isExternalPack() && !instance.launcher.vanillaInstance
-                            && instance.launcher.mods.stream().anyMatch(mod -> mod.optional));
-                    rightClickMenu.add(shareCodeItem);
-
                     rightClickMenu.show(image, e.getX(), e.getY());
                 }
             }
@@ -682,6 +713,8 @@ public class InstanceCard extends CollapsiblePanel implements RelocalizationList
         this.serversButton.setText(GetText.tr("Servers"));
         this.openWebsite.setText(GetText.tr("Open Website"));
         this.openButton.setText(GetText.tr("Open Folder"));
+        this.openResourceMenuItem.setText(GetText.tr("Open Resources"));
+        this.openInstanceJsonMenuItem.setText(GetText.tr("Open instance.json"));
         this.settingsButton.setText(GetText.tr("Settings"));
 
         this.normalBackupMenuItem.setText(GetText.tr("Normal Backup"));
@@ -692,6 +725,8 @@ public class InstanceCard extends CollapsiblePanel implements RelocalizationList
         this.discordLinkMenuItem.setText(GetText.tr("Discord"));
         this.supportLinkMenuItem.setText(GetText.tr("Support"));
         this.websiteLinkMenuItem.setText(GetText.tr("Website"));
+        this.wikiLinkMenuItem.setText(GetText.tr("Wiki"));
+        this.sourceLinkMenuItem.setText(GetText.tr("Source"));
         this.getHelpButton.setText(GetText.tr("Get Help"));
     }
 }

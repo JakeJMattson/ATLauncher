@@ -19,14 +19,15 @@ package com.atlauncher.network;
 
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.lang.reflect.Type;
 import java.net.SocketTimeoutException;
 import java.nio.channels.Channels;
 import java.nio.channels.FileChannel;
 import java.nio.channels.ReadableByteChannel;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 
 import com.atlauncher.App;
@@ -40,7 +41,6 @@ import com.atlauncher.utils.Hashing;
 import com.atlauncher.utils.Utils;
 import com.atlauncher.workers.InstanceInstaller;
 import com.google.common.hash.HashCode;
-import com.google.gson.Gson;
 
 import okhttp3.CacheControl;
 import okhttp3.Headers;
@@ -60,6 +60,7 @@ public final class Download {
     public Path unzipTo;
     public Path extractedTo;
     public Path copyTo;
+    private boolean forceDownload = false;
     private boolean ignoreFailures = false;
     private boolean deleteAfterExtract = false;
     private String hash;
@@ -70,7 +71,7 @@ public final class Download {
     private OkHttpClient httpClient = Network.CLIENT;
     private RequestBody post = null;
     private CacheControl cacheControl = null;
-    private final Map<String, String> headers = new HashMap<String, String>();
+    private final Map<String, String> headers = new HashMap<>();
 
     // generated on/after request
     public Response response;
@@ -124,25 +125,9 @@ public final class Download {
         return null;
     }
 
-    public <T> T asClassWithThrow(Class<T> tClass, Gson gson) throws IOException {
-        if (this.to != null) {
-            if (this.needToDownload()) {
-                this.downloadFile();
-            }
-
-            try (InputStreamReader isr = new InputStreamReader(Files.newInputStream(this.to))) {
-                return gson.fromJson(isr, tClass);
-            }
-        }
-
-        this.execute();
-
-        return gson.fromJson(this.response.body().charStream(), tClass);
-    }
-
-    public <T> T asClass(Class<T> tClass, Gson gson) {
+    public <T> T asClass(Class<T> tClass) {
         try {
-            return asClassWithThrow(tClass, gson);
+            return this.asClassWithThrow(tClass);
         } catch (IOException e) {
             LogManager.logStackTrace(e);
 
@@ -153,53 +138,16 @@ public final class Download {
         }
 
         return null;
-    }
-
-    public <T> T asClass(Class<T> tClass) {
-        return asClass(tClass, Gsons.MINECRAFT);
     }
 
     public <T> T asClassWithThrow(Class<T> tClass) throws IOException {
-        return asClassWithThrow(tClass, Gsons.MINECRAFT);
-    }
-
-    public <T> T asTypeWithThrow(Type tClass, Gson gson) throws IOException {
-        if (this.to != null) {
-            if (this.needToDownload()) {
-                this.downloadFile();
-            }
-
-            try (InputStreamReader isr = new InputStreamReader(Files.newInputStream(this.to))) {
-                return gson.fromJson(isr, tClass);
-            }
+        if (this.needToDownload()) {
+            this.downloadFile();
         }
 
-        this.execute();
-
-        return gson.fromJson(this.response.body().charStream(), tClass);
-    }
-
-    public <T> T asType(Type tClass, Gson gson) {
-        try {
-            return asTypeWithThrow(tClass, gson);
-        } catch (IOException e) {
-            LogManager.logStackTrace(e);
-
-            if (this.response != null) {
-                this.response.close();
-                this.response = null;
-            }
+        try (InputStreamReader isr = new InputStreamReader(Files.newInputStream(this.to), StandardCharsets.UTF_8)) {
+            return Gsons.DEFAULT.fromJson(isr, tClass);
         }
-
-        return null;
-    }
-
-    public <T> T asType(Type tClass) {
-        return asType(tClass, Gsons.MINECRAFT);
-    }
-
-    public <T> T asTypeWithThrow(Type tClass) throws IOException {
-        return asTypeWithThrow(tClass, Gsons.MINECRAFT);
     }
 
     public Download downloadTo(Path to) {
@@ -216,6 +164,12 @@ public final class Download {
 
     public Download unzipTo(Path unzipTo) {
         this.unzipTo = unzipTo;
+
+        return this;
+    }
+
+    public Download forceDownload() {
+        this.forceDownload = true;
 
         return this;
     }
@@ -309,7 +263,7 @@ public final class Download {
             builder.post(this.post);
         }
 
-        if (this.headers.size() != 0) {
+        if (!this.headers.isEmpty()) {
             builder.headers(Headers.of(this.headers));
         }
 
@@ -320,6 +274,9 @@ public final class Download {
         this.response = httpClient.newCall(builder.build()).execute();
 
         if (this.response == null || (!this.ignoreFailures && !this.response.isSuccessful())) {
+            if (this.response != null && this.response.code() == 429) {
+                LogManager.info(this.response.headers().toString());
+            }
             throw new DownloadException(this);
         }
     }
@@ -344,6 +301,10 @@ public final class Download {
 
     private boolean md5() {
         return this.hash != null && this.hash.length() == 32;
+    }
+
+    private boolean sha256() {
+        return this.hash != null && this.hash.length() == 64;
     }
 
     private boolean sha512() {
@@ -411,7 +372,7 @@ public final class Download {
     }
 
     public boolean needToDownload() {
-        if (this.to == null) {
+        if (this.to == null || this.forceDownload) {
             return true;
         }
 
@@ -432,6 +393,8 @@ public final class Download {
                 }
             } else if (this.md5() && Hashing.md5(this.to).equals(Hashing.toHashCode(this.getHash()))) {
                 return false;
+            } else if (this.sha256() && Hashing.sha256(this.to).equals(Hashing.toHashCode(this.getHash()))) {
+                return false;
             } else if (this.sha512() && Hashing.sha512(this.to).equals(Hashing.toHashCode(this.getHash()))) {
                 return false;
             } else if (Hashing.sha1(this.to).equals(Hashing.toHashCode(this.getHash()))) {
@@ -439,9 +402,7 @@ public final class Download {
             }
 
             // if no hash, but filesizes match, then no need to download
-            if ((this.hash == null || this.hash.equals("-")) && this.to.toFile().length() == this.getFilesize()) {
-                return false;
-            }
+            return (this.hash != null && !this.hash.equals("-")) || this.to.toFile().length() != this.getFilesize();
         }
 
         return true;
@@ -456,7 +417,7 @@ public final class Download {
             }
         }
         try (FileChannel fc = FileChannel.open(this.to, Utils.WRITE);
-                ReadableByteChannel rbc = Channels.newChannel(this.response.body().byteStream())) {
+            ReadableByteChannel rbc = Channels.newChannel(this.response.body().byteStream())) {
             fc.transferFrom(rbc, 0, Long.MAX_VALUE);
         } catch (Exception e) {
             LogManager.logStackTrace("Failed to download file " + this.to, e, false);
@@ -474,6 +435,8 @@ public final class Download {
                 }
             } else if (this.md5()) {
                 return Hashing.md5(this.to).equals(Hashing.toHashCode(this.getHash()));
+            } else if (this.sha256()) {
+                return Hashing.sha256(this.to).equals(Hashing.toHashCode(this.getHash()));
             } else if (this.sha512()) {
                 return Hashing.sha512(this.to).equals(Hashing.toHashCode(this.getHash()));
             } else {
@@ -524,8 +487,9 @@ public final class Download {
         // size and log a warning
         if (this.ignoreFailures && this.to.toFile().length() != 0) {
             LogManager
-                    .warn(String.format("%s (of size %d) hash didn't match, but we're ignoring failures, so continuing",
-                            this.to.getFileName(), this.to.toFile().length()));
+                .warn(String.format(Locale.ENGLISH,
+                    "%s (of size %d) hash didn't match, but we're ignoring failures, so continuing",
+                    this.to.getFileName(), this.to.toFile().length()));
             return true;
         }
 
@@ -561,6 +525,10 @@ public final class Download {
             return;
         }
 
+        if (this.url == null || this.url.isEmpty()) {
+            return;
+        }
+
         if (!this.needToDownload()) {
             if (this.copyTo != null) {
                 if (this.fingerprint != null) {
@@ -569,12 +537,15 @@ public final class Download {
                             this.copy();
                         }
                     } catch (IOException ignored) {
+                        // ignored
                     }
                 } else {
                     HashCode fileHash = Hashing.EMPTY_HASH_CODE;
                     if (Files.exists(this.copyTo)) {
                         if (this.md5()) {
                             fileHash = Hashing.md5(this.copyTo);
+                        } else if (this.sha256()) {
+                            fileHash = Hashing.sha256(this.copyTo);
                         } else if (this.sha512()) {
                             fileHash = Hashing.sha512(this.copyTo);
                         } else {
@@ -600,7 +571,7 @@ public final class Download {
                 // if timeout, attempt to download again
                 if (e instanceof SocketTimeoutException && tries < 3) {
                     LogManager.warn(String.format("Failed to download %s from %s due to timeout. Attempting again.",
-                            this.to.getFileName().toString(), this.url));
+                        this.to.getFileName().toString(), this.url));
                     downloadFile(tries++);
                     return;
                 }
@@ -634,7 +605,7 @@ public final class Download {
         }
 
         if ((this.ignoreFailures && this.to.toFile().length() != 0)
-                || (expected != null && expected.equals(Hashing.EMPTY_HASH_CODE))) {
+            || (expected != null && expected.equals(Hashing.EMPTY_HASH_CODE))) {
             if (this.response.isSuccessful()) {
                 this.downloadDirect();
             }
@@ -644,27 +615,30 @@ public final class Download {
             if (!downloaded) {
                 if (this.response != null && this.response.header("content-type").contains("text/html")) {
                     LogManager.error(
-                            "The response from this request was a HTML response. This is usually caused by an antivirus or firewall software intercepting and rewriting the response. The response is below.");
+                        "The response from this request was a HTML response. This is usually caused by an antivirus or firewall software intercepting and rewriting the response. The response is below.");
 
-                    LogManager.error(new String(Files.readAllBytes(this.to)));
+                    LogManager.error(new String(Files.readAllBytes(this.to), StandardCharsets.UTF_8));
                 }
 
                 FileUtils.copyFile(this.to, FileSystem.FAILED_DOWNLOADS);
                 if (fingerprint != null) {
                     LogManager.error("Error downloading " + this.to.getFileName() + " from " + this.url + ". Expected"
-                            + " fingerprint of " + fingerprint.toString() + " (with size of " + this.size + ") but got "
-                            + Hashing.murmur(this.to) + " (with size of "
-                            + (Files.exists(this.to) ? Files.size(this.to) : 0)
-                            + ") instead. Copied to FailedDownloads folder & cancelling install! ("
-                            + App.settings.connectionTimeout + "/" + App.settings.concurrentConnections + ")");
+                        + " fingerprint of " + fingerprint.toString() + " ("
+                        + (this.size == 0 ? "with unknown size" : "with size of" + this.size) + ") but got "
+                        + Hashing.murmur(this.to) + " (with size of "
+                        + (Files.exists(this.to) ? Files.size(this.to) : 0)
+                        + ") instead. Copied to FailedDownloads folder & cancelling install! ("
+                        + App.settings.connectionTimeout + "/" + App.settings.concurrentConnections + ")");
                 } else {
                     LogManager.error("Error downloading " + this.to.getFileName() + " from " + this.url + ". Expected"
-                            + " hash of " + expected.toString() + " (with size of " + this.size + ") but got "
-                            + (this.md5() ? Hashing.md5(this.to)
-                                    : (this.sha512() ? Hashing.sha512(this.to) : Hashing.sha1(this.to)))
-                            + " (with size of " + (Files.exists(this.to) ? Files.size(this.to) : 0)
-                            + ") instead. Copied to FailedDownloads folder & cancelling install! ("
-                            + App.settings.connectionTimeout + "/" + App.settings.concurrentConnections + ")");
+                        + " hash of " + expected.toString() + " ("
+                        + (this.size == 0 ? "with unknown size" : "with size of" + this.size) + ") but got "
+                        + (this.md5() ? Hashing.md5(this.to)
+                        : (this.sha256() ? Hashing.sha256(this.to)
+                            : (this.sha512() ? Hashing.sha512(this.to) : Hashing.sha1(this.to))))
+                        + " (with size of " + (Files.exists(this.to) ? Files.size(this.to) : 0)
+                        + ") instead. Copied to FailedDownloads folder & cancelling install! ("
+                        + App.settings.connectionTimeout + "/" + App.settings.concurrentConnections + ")");
                 }
                 if (this.instanceInstaller != null) {
                     this.instanceInstaller.cancel(true);
@@ -678,12 +652,15 @@ public final class Download {
                             this.copy();
                         }
                     } catch (IOException ignored) {
+                        // ignored
                     }
                 } else {
                     HashCode fileHash2 = Hashing.EMPTY_HASH_CODE;
                     if (Files.exists(this.copyTo)) {
                         if (this.md5()) {
                             fileHash2 = Hashing.md5(this.copyTo);
+                        } else if (this.sha256()) {
+                            fileHash2 = Hashing.sha256(this.copyTo);
                         } else if (this.sha512()) {
                             fileHash2 = Hashing.sha512(this.copyTo);
                         } else {
@@ -733,6 +710,7 @@ public final class Download {
         return this.to.getFileName().toString();
     }
 
+    @Override
     public boolean equals(Object other) {
         if (other instanceof Download) {
             try {
@@ -745,6 +723,7 @@ public final class Download {
         }
     }
 
+    @Override
     public int hashCode() {
         return this.to.hashCode();
     }

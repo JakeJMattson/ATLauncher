@@ -18,11 +18,9 @@
 package com.atlauncher.data;
 
 import java.io.File;
-import java.io.IOException;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
+import java.util.Locale;
 
 import javax.swing.ImageIcon;
 
@@ -30,16 +28,14 @@ import com.atlauncher.FileSystem;
 import com.atlauncher.Gsons;
 import com.atlauncher.constants.Constants;
 import com.atlauncher.data.curseforge.CurseForgeProject;
+import com.atlauncher.data.ftb.FTBPackManifest;
 import com.atlauncher.data.json.Version;
-import com.atlauncher.data.modpacksch.ModpacksChPackManifest;
 import com.atlauncher.data.modrinth.ModrinthProject;
 import com.atlauncher.data.technic.TechnicModpack;
 import com.atlauncher.graphql.AddPackActionMutation;
 import com.atlauncher.graphql.type.AddPackActionInput;
 import com.atlauncher.graphql.type.PackLogAction;
 import com.atlauncher.managers.AccountManager;
-import com.atlauncher.managers.ConfigManager;
-import com.atlauncher.managers.LogManager;
 import com.atlauncher.managers.PackManager;
 import com.atlauncher.network.GraphqlClient;
 import com.atlauncher.utils.Utils;
@@ -52,8 +48,8 @@ public class Pack {
     public String name;
     public PackType type;
     public String code;
-    public List<PackVersion> versions;
-    public List<PackVersion> devVersions;
+    public List<PackVersion> versions = new ArrayList<>();
+    public List<PackVersion> devVersions = new ArrayList<>();
     public boolean createServer;
     public boolean logging;
     public boolean featured;
@@ -61,7 +57,8 @@ public class Pack {
     public boolean hasDiscordImage;
     public String description;
     public CurseForgeProject curseForgeProject;
-    public ModpacksChPackManifest modpacksChPack;
+    public String curseForgeProjectDescription = null;
+    public FTBPackManifest ftbPack;
     public ModrinthProject modrinthProject;
     public TechnicModpack technicModpack;
     public String discordInviteURL = null;
@@ -81,8 +78,7 @@ public class Pack {
     }
 
     /**
-     * Gets a file safe and URL safe name which simply means replacing all non alpha
-     * numerical characters with nothing
+     * Gets a file safe and URL safe name which simply means replacing all non alpha numerical characters with nothing
      *
      * @return File safe and URL safe name of the pack
      */
@@ -95,7 +91,7 @@ public class Pack {
     }
 
     public ImageIcon getImage() {
-        File imageFile = FileSystem.IMAGES.resolve(getSafeName().toLowerCase() + ".png").toFile();
+        File imageFile = FileSystem.IMAGES.resolve(getSafeName().toLowerCase(Locale.ENGLISH) + ".png").toFile();
         if (!imageFile.exists()) {
             return Utils.getIconImage("/assets/image/default-image.png");
         }
@@ -174,7 +170,7 @@ public class Pack {
     }
 
     public boolean isTester() {
-        AbstractAccount account = AccountManager.getSelectedAccount();
+        MicrosoftAccount account = AccountManager.getSelectedAccount();
         if (account == null) {
             return false;
         }
@@ -187,35 +183,28 @@ public class Pack {
     }
 
     public boolean hasVersions() {
-        return this.versions.size() != 0;
+        return !this.versions.isEmpty();
     }
 
     public boolean hasDevVersions() {
-        return this.devVersions.size() != 0;
+        return !this.devVersions.isEmpty();
     }
 
     public boolean canInstall() {
         if (this.type == PackType.PRIVATE) {
-            if (isTester() || (hasVersions() && isAllowedPlayer())) {
-                return true;
-            }
+            return isTester() || (hasVersions() && isAllowedPlayer());
         } else if (this.type == PackType.SEMIPUBLIC && this.code != null) {
-            if (isTester() || (hasVersions() && PackManager.canViewSemiPublicPackByCode(this.code))) {
-                return true;
-            }
+            return isTester() || (hasVersions() && PackManager.canViewSemiPublicPackByCode(this.code));
         } else {
-            if (isTester() || hasVersions()) {
-                return true;
-            }
+            return isTester() || hasVersions();
         }
-        return false;
     }
 
     public boolean isAllowedPlayer() {
         if (this.type != PackType.PRIVATE) {
             return true;
         }
-        AbstractAccount account = AccountManager.getSelectedAccount();
+        MicrosoftAccount account = AccountManager.getSelectedAccount();
         if (account == null) {
             return false;
         }
@@ -236,7 +225,7 @@ public class Pack {
     }
 
     public PackVersion getDevVersionByName(String name) {
-        if (this.devVersions.size() == 0) {
+        if (this.devVersions.isEmpty()) {
             return null;
         }
 
@@ -250,7 +239,7 @@ public class Pack {
     }
 
     public PackVersion getVersionByName(String name) {
-        if (this.versions.size() == 0) {
+        if (this.versions.isEmpty()) {
             return null;
         }
 
@@ -264,21 +253,21 @@ public class Pack {
     }
 
     public PackVersion getLatestVersion() {
-        if (this.versions.size() == 0) {
+        if (this.versions.isEmpty()) {
             return null;
         }
         return this.versions.get(0);
     }
 
     public PackVersion getLatestDevVersion() {
-        if (this.devVersions.size() == 0) {
+        if (this.devVersions.isEmpty()) {
             return null;
         }
         return this.devVersions.get(0);
     }
 
     public boolean isLatestVersionNoUpdate() {
-        if (this.versions.size() == 0) {
+        if (this.versions.isEmpty()) {
             return false;
         }
         if (!getLatestVersion().canUpdate) {
@@ -300,7 +289,7 @@ public class Pack {
             int tries = 1;
             do {
                 this.json = com.atlauncher.network.Download.build().cached().setUrl(this.getJsonDownloadUrl(version))
-                        .asString();
+                    .asString();
                 tries++;
             } while (json == null && tries < 5);
             this.jsonVersion = version;
@@ -310,63 +299,27 @@ public class Pack {
 
     public String getJsonDownloadUrl(String version) {
         return String.format("%s/packs/%s/versions/%s/Configs.json", Constants.DOWNLOAD_SERVER, this.getSafeName(),
-                version);
+            version);
     }
 
     public void addInstall(String version) {
-        if (ConfigManager.getConfigItem("useGraphql.packActions", false) == true) {
-            GraphqlClient
-                    .mutateAndWait(
-                            new AddPackActionMutation(AddPackActionInput.builder().packId(Integer.toString(
-                                    id)).version(version).action(PackLogAction.INSTALL).build()));
-        } else {
-            Map<String, Object> request = new HashMap<>();
-
-            request.put("version", version);
-
-            try {
-                Utils.sendAPICall("pack/" + getSafeName() + "/installed/", request);
-            } catch (IOException e) {
-                LogManager.logStackTrace(e);
-            }
-        }
+        GraphqlClient
+            .mutateAndWait(
+                new AddPackActionMutation(AddPackActionInput.builder().packId(Integer.toString(
+                    id)).version(version).action(PackLogAction.INSTALL).build()));
     }
 
     public void addServerInstall(String version) {
-        if (ConfigManager.getConfigItem("useGraphql.packActions", false) == true) {
-            GraphqlClient
-                    .mutateAndWait(
-                            new AddPackActionMutation(AddPackActionInput.builder().packId(Integer.toString(
-                                    id)).version(version).action(PackLogAction.SERVER).build()));
-        } else {
-            Map<String, Object> request = new HashMap<>();
-
-            request.put("version", version);
-
-            try {
-                Utils.sendAPICall("pack/" + getSafeName() + "/serverinstalled/", request);
-            } catch (IOException e) {
-                LogManager.logStackTrace(e);
-            }
-        }
+        GraphqlClient
+            .mutateAndWait(
+                new AddPackActionMutation(AddPackActionInput.builder().packId(Integer.toString(
+                    id)).version(version).action(PackLogAction.SERVER).build()));
     }
 
     public void addUpdate(String version) {
-        if (ConfigManager.getConfigItem("useGraphql.packActions", false) == true) {
-            GraphqlClient
-                    .mutateAndWait(
-                            new AddPackActionMutation(AddPackActionInput.builder().packId(Integer.toString(
-                                    id)).version(version).action(PackLogAction.UPDATE).build()));
-        } else {
-            Map<String, Object> request = new HashMap<>();
-
-            request.put("version", version);
-
-            try {
-                Utils.sendAPICall("pack/" + getSafeName() + "/updated/", request);
-            } catch (IOException e) {
-                LogManager.logStackTrace(e);
-            }
-        }
+        GraphqlClient
+            .mutateAndWait(
+                new AddPackActionMutation(AddPackActionInput.builder().packId(Integer.toString(
+                    id)).version(version).action(PackLogAction.UPDATE).build()));
     }
 }

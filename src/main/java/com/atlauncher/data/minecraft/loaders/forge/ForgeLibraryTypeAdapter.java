@@ -56,7 +56,7 @@ public class ForgeLibraryTypeAdapter implements JsonDeserializer<ForgeLibrary> {
         if (object.has("downloads")) {
             library.downloads = new Gson().fromJson(object.get("downloads").getAsJsonObject(), Downloads.class);
 
-            if (library.downloads.artifact.url.isEmpty()) {
+            if (library.downloads.artifact.url.isEmpty() && !library.downloads.artifact.path.endsWith("-client.jar")) {
                 // forge installer provides this out the zip (14.23.5.2851 and later), but when
                 // the file is removed from shared libraries, we need to add the url
                 library.downloads.artifact.url = Constants.FORGE_MAVEN_BASE + library.downloads.artifact.path;
@@ -107,12 +107,15 @@ public class ForgeLibraryTypeAdapter implements JsonDeserializer<ForgeLibrary> {
                             try {
                                 Request.Builder headRequestBuilder = new Request.Builder()
                                         .url(Constants.DOWNLOAD_SERVER + "/maven/" + artifact.path).head();
-                                Response headResponse = Network.CLIENT.newCall(headRequestBuilder.build()).execute();
-
-                                if (headResponse.code() == 200) {
-                                    url = Constants.DOWNLOAD_SERVER + "/maven/";
+                                try (
+                                    Response headResponse = Network.CLIENT.newCall(headRequestBuilder.build()).execute()
+                                ) {
+                                    if (headResponse.code() == 200) {
+                                        url = Constants.DOWNLOAD_SERVER + "/maven/";
+                                    }
                                 }
                             } catch (IOException ignored) {
+                                // ignored
                             }
                         }
 

@@ -57,9 +57,9 @@ spewed in the root directory and are instead contained within a gitignored folde
 
 ## Using an IDE
 
-This project is mainly setup and developed to use [VSCode](https://code.visualstudio.com/) for development. You're free
+~~This project is mainly setup and developed to use [VSCode](https://code.visualstudio.com/) for development. You're free
 to use any other IDE that you're accustomed to (if any), but by using VSCode, you get the benefit of predefined tasks
-and launch commands as well as a list of extensions recommended for the project.
+and launch commands as well as a list of extensions recommended for the project.~~ VSCode no longer works well after the upgrade to be part Kotlin. Until fixed, it's recommended to use IntelliJ.
 
 We also provide some base project files for [IntelliJ IDEA](https://www.jetbrains.com/idea/) so that if you use that,
 you should get access to our base project files which contain correct launch tasks for testing the application as well
@@ -74,6 +74,18 @@ To check for dependency updates with gradle, simply run:
 ```
 
 This will print a report to the console about any dependencies which have updates.
+
+## Updating new GraphQL queries/mutations
+
+When new GraphQL queries/mutations are added into the `src/main/graphql` directory, you must first download the JSON
+schema from <https://studio.apollographql.com/public/ATLauncher/variant/current/schema/sdl> and then run the
+`generateApolloSources` task to generate the Java files:
+
+```sh
+./gradlew generateApolloSources
+```
+
+This will codegen the java files so you can use the query/mutation.
 
 ## Updating license headers in all files
 

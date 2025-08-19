@@ -39,6 +39,10 @@ import org.freedesktop.dbus.types.Variant;
 
 public class DBusUtils {
     public static File[] selectFiles() {
+        return selectFiles(false);
+    }
+
+    public static File[] selectFiles(Boolean directory) {
         try {
             DBusConnection bus = DBusConnection.getConnection(DBusConnection.DBusBusType.SESSION);
 
@@ -82,16 +86,14 @@ public class DBusUtils {
                     "/org/freedesktop/portal/desktop", FileChooserInterface.class);
 
             Map<String, Variant> options = new HashMap<>();
-            options.put("directory", new Variant(Boolean.FALSE));
+            options.put("directory", new Variant(directory));
             options.put("handle_token", new Variant(token));
 
             fileChooserInterface.OpenFile("", "Pick File", options);
 
             Optional<String[]> selectedFiles = queue.take();
             if (selectedFiles.isPresent()) {
-                return Arrays.stream(selectedFiles.get()).map(f -> {
-                    return new File(f);
-                }).toArray(size -> new File[selectedFiles.get().length]);
+                return Arrays.stream(selectedFiles.get()).map(File::new).toArray(size -> new File[selectedFiles.get().length]);
             }
         } catch (Throwable t) {
             LogManager.logStackTrace("Error selecting files using DBus", t);

@@ -22,13 +22,13 @@ import java.awt.Dimension;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
-import java.util.Map;
+import java.util.stream.Collectors;
 
 import javax.swing.JButton;
 import javax.swing.JDialog;
 import javax.swing.JLabel;
-import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
@@ -38,7 +38,6 @@ import javax.swing.UIManager;
 import org.mini2Dx.gettext.GetText;
 
 import com.atlauncher.App;
-import com.atlauncher.Gsons;
 import com.atlauncher.data.json.Mod;
 import com.atlauncher.gui.components.ModsJCheckBox;
 import com.atlauncher.managers.DialogManager;
@@ -46,14 +45,10 @@ import com.atlauncher.managers.LogManager;
 import com.atlauncher.network.Analytics;
 import com.atlauncher.utils.Utils;
 import com.atlauncher.workers.InstanceInstaller;
-import com.google.gson.reflect.TypeToken;
-
-import io.github.asyncronous.toast.Toaster;
 
 public class ModsChooser extends JDialog {
     private static final long serialVersionUID = -5309108183485463434L;
     private final InstanceInstaller installer;
-    private final JButton useShareCode;
     private final JButton selectAllButton;
     private final JButton clearAllButton;
     private final JButton installButton;
@@ -74,6 +69,7 @@ public class ModsChooser extends JDialog {
         setResizable(false);
         setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
         addWindowListener(new WindowAdapter() {
+            @Override
             public void windowClosing(WindowEvent arg0) {
                 wasClosed = true;
                 dispose();
@@ -135,18 +131,6 @@ public class ModsChooser extends JDialog {
         JPanel bottomPanel = new JPanel();
         add(bottomPanel, BorderLayout.SOUTH);
 
-        useShareCode = new JButton();
-        useShareCode.setText(GetText.tr("Use Share Code"));
-        useShareCode.addActionListener(e -> {
-            String ret = JOptionPane.showInputDialog(null, GetText.tr("Enter Share Code"), GetText.tr("Share Code"),
-                    JOptionPane.QUESTION_MESSAGE);
-
-            if (ret != null) {
-                applyShareCode(ret);
-            }
-        });
-        bottomPanel.add(useShareCode);
-
         selectAllButton = new JButton();
 
         if (installer.hasRecommendedMods()) {
@@ -206,64 +190,65 @@ public class ModsChooser extends JDialog {
         int count1 = 0;
         int count2 = 0;
 
-        for (int i = 0; i < installer.allMods.size();) {
-            boolean skip = false;
-            final Mod mod = installer.allMods.get(i);
+        List<Mod> orderedMods = installer.allMods.stream().sorted(Comparator.comparing(Mod::getName))
+                .collect(Collectors.toList());
+
+        for (int i = 0; i < orderedMods.size();) {
+            final Mod mod = orderedMods.get(i);
             if (installer.isServer && !mod.installOnServer()) {
                 continue;
             }
-            ModsJCheckBox checkBox = null;
+
+            ModsJCheckBox checkBox;
             if ((installer.isServer ? mod.isServerOptional() : mod.isOptional())) {
-                if (!skip) {
-                    checkBox = new ModsJCheckBox(mod);
-                    checkBox.setEnabled(true);
-                    if (!mod.hasLinked()) {
+                checkBox = new ModsJCheckBox(mod);
+                checkBox.setEnabled(true);
+                if (!mod.hasLinked()) {
+                    checkBox.setBounds(0, (count1 * 20), checkBox.getPreferredSize().width, 20);
+                } else {
+                    Mod linkedMod = installer.getModByName(mod.getLinked());
+                    if (linkedMod == null) {
+                        LogManager.error("The mod " + mod.getName() + " tried to reference a linked mod "
+                                + mod.getLinked() + " which doesn't exist!");
+                        installer.cancel(true);
+                        return;
+                    }
+                    if ((installer.isServer ? linkedMod.isServerOptional() : linkedMod.isOptional())) {
+                        checkBox.setEnabled(false);
+                        checkBox.setBounds(20, (count1 * 20), checkBox.getPreferredSize().width, 20);
+                    } else {
                         checkBox.setBounds(0, (count1 * 20), checkBox.getPreferredSize().width, 20);
-                    } else {
-                        Mod linkedMod = installer.getModByName(mod.getLinked());
-                        if (linkedMod == null) {
-                            LogManager.error("The mod " + mod.getName() + " tried to reference a linked mod "
-                                    + mod.getLinked() + " which doesn't exist!");
-                            installer.cancel(true);
-                            return;
-                        }
-                        if ((installer.isServer ? linkedMod.isServerOptional() : linkedMod.isOptional())) {
-                            checkBox.setEnabled(false);
-                            checkBox.setBounds(20, (count1 * 20), checkBox.getPreferredSize().width, 20);
-                        } else {
-                            checkBox.setBounds(0, (count1 * 20), checkBox.getPreferredSize().width, 20);
-                        }
-                        if (mod.isSelected()) {
-                            checkBox.setEnabled(true);
-                            checkBox.setSelected(true);
-                            if (!linkedMod.isSelected()) {
-                                boolean needToEnableChildren = false;
+                    }
+                    if (mod.isSelected()) {
+                        checkBox.setEnabled(true);
+                        checkBox.setSelected(true);
+                        if (!linkedMod.isSelected()) {
+                            boolean needToEnableChildren = false;
+                            for (ModsJCheckBox checkbox : modCheckboxes) {
+                                if (checkbox.getMod().getName().equalsIgnoreCase(mod.getLinked())) {
+                                    checkbox.setSelected(true); // Select the checkbox
+                                    needToEnableChildren = true;
+                                    break;
+                                }
+                            }
+                            if (needToEnableChildren) {
                                 for (ModsJCheckBox checkbox : modCheckboxes) {
-                                    if (checkbox.getMod().getName().equalsIgnoreCase(mod.getLinked())) {
-                                        checkbox.setSelected(true); // Select the checkbox
-                                        needToEnableChildren = true;
-                                        break;
+                                    if (checkbox.getMod().getLinked().equalsIgnoreCase(mod.getLinked())) {
+                                        checkbox.setEnabled(true);
                                     }
                                 }
-                                if (needToEnableChildren) {
-                                    for (ModsJCheckBox checkbox : modCheckboxes) {
-                                        if (checkbox.getMod().getLinked().equalsIgnoreCase(mod.getLinked())) {
-                                            checkbox.setEnabled(true);
-                                        }
-                                    }
-                                }
-                            }
-                        } else {
-                            if (linkedMod.isSelected()) {
-                                checkBox.setEnabled(true);
                             }
                         }
-                    }
-                    if (mod.isHidden() || mod.isLibrary()) {
-                        checkBox.setVisible(false);
                     } else {
-                        count1++;
+                        if (linkedMod.isSelected()) {
+                            checkBox.setEnabled(true);
+                        }
                     }
+                }
+                if (mod.isHidden() || mod.isLibrary()) {
+                    checkBox.setVisible(false);
+                } else {
+                    count1++;
                 }
 
                 if (mod.hasWarning()) {
@@ -302,6 +287,7 @@ public class ModsChooser extends JDialog {
                     count2++;
                 }
             }
+
             if (installer.isReinstall) {
                 if (!installer.wasModSelected(mod.getName())) {
                     if ((installer.isServer ? mod.isServerOptional() : mod.isOptional())) {
@@ -325,9 +311,8 @@ public class ModsChooser extends JDialog {
                 sortOutMods(a, true);
             });
             modCheckboxes.add(checkBox);
-            if (!skip) {
-                i++;
-            }
+
+            i++;
         }
         for (ModsJCheckBox checkBox : modCheckboxes) {
             if ((installer.isServer ? checkBox.getMod().isServerOptional() : checkBox.getMod().isOptional())) {
@@ -355,7 +340,6 @@ public class ModsChooser extends JDialog {
     private int calculateWidth() {
         int width = 50;
 
-        width += useShareCode.getPreferredSize().width;
         width += selectAllButton.getPreferredSize().width;
         width += clearAllButton.getPreferredSize().width;
         width += installButton.getPreferredSize().width;
@@ -365,56 +349,6 @@ public class ModsChooser extends JDialog {
         }
 
         return width;
-    }
-
-    public void applyShareCode(String code) {
-        try {
-            String data = installer.getShareCodeData(code);
-
-            if (data == null) {
-                Toaster.instance().popError(GetText.tr("Invalid Share Code"));
-                return;
-            }
-
-            java.lang.reflect.Type type = new TypeToken<Map<String, List<Map<String, String>>>>() {
-            }.getType();
-
-            Map<String, List<Map<String, String>>> mods = Gsons.DEFAULT.fromJson(data, type);
-
-            if (mods == null) {
-                Toaster.instance().popError(GetText.tr("Invalid Share Code"));
-                return;
-            }
-
-            List<Map<String, String>> optionalMods = mods.get("optional");
-
-            if (optionalMods == null || optionalMods.size() == 0) {
-                Toaster.instance().popError(GetText.tr("Invalid Share Code"));
-                return;
-            }
-
-            for (ModsJCheckBox checkbox : this.modCheckboxes) {
-                if (!checkbox.getMod().isOptional()) {
-                    continue;
-                }
-
-                boolean found = false;
-
-                for (Map<String, String> mod : optionalMods) {
-                    if (mod.get("name").equalsIgnoreCase(checkbox.getMod().getName())) {
-                        found = true;
-                        break;
-                    }
-                }
-
-                if (found) {
-                    checkbox.setSelected(true);
-                }
-            }
-        } catch (Exception e) {
-            LogManager.error("Invalid share code!");
-            Toaster.instance().popError(GetText.tr("Invalid Share Code"));
-        }
     }
 
     private List<Mod> modsToChange(Mod mod) {

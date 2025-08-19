@@ -43,6 +43,9 @@ import com.atlauncher.App;
 import com.atlauncher.constants.Constants;
 import com.atlauncher.data.AddModRestriction;
 import com.atlauncher.data.Instance;
+import com.atlauncher.data.ModManagement;
+import com.atlauncher.data.Server;
+import com.atlauncher.data.minecraft.loaders.LoaderVersion;
 import com.atlauncher.data.modrinth.ModrinthDependency;
 import com.atlauncher.data.modrinth.ModrinthDependencyType;
 import com.atlauncher.data.modrinth.ModrinthFile;
@@ -51,6 +54,7 @@ import com.atlauncher.data.modrinth.ModrinthProjectType;
 import com.atlauncher.data.modrinth.ModrinthVersion;
 import com.atlauncher.exceptions.InvalidMinecraftVersion;
 import com.atlauncher.gui.card.ModrinthProjectDependencyCard;
+import com.atlauncher.managers.ConfigManager;
 import com.atlauncher.managers.DialogManager;
 import com.atlauncher.managers.LogManager;
 import com.atlauncher.managers.MinecraftManager;
@@ -59,12 +63,11 @@ import com.atlauncher.utils.ComboItem;
 import com.atlauncher.utils.ModrinthApi;
 import com.atlauncher.utils.OS;
 
-@SuppressWarnings("serial")
 public class ModrinthVersionSelectorDialog extends JDialog {
     private int versionsLength = 0;
     private int filesLength = 0;
-    private final ModrinthProject mod;
-    private final Instance instance;
+    private final ModrinthProject project;
+    private final ModManagement instanceOrServer;
     private String installedVersionId = null;
     private boolean selectNewest = true;
 
@@ -82,48 +85,37 @@ public class ModrinthVersionSelectorDialog extends JDialog {
     private JLabel filesLabel;
     private JComboBox<ComboItem<ModrinthFile>> filesDropdown;
 
-    public ModrinthVersionSelectorDialog(ModrinthProject mod, Instance instance) {
-        this(App.launcher.getParent(), mod, instance);
+    public ModrinthVersionSelectorDialog(ModrinthProject mod, ModManagement instanceOrServer) {
+        this(App.launcher.getParent(), mod, instanceOrServer);
     }
 
-    public ModrinthVersionSelectorDialog(Window parent, ModrinthProject mod, Instance instance) {
+    public ModrinthVersionSelectorDialog(Window parent, ModrinthProject mod, ModManagement instanceOrServer) {
         super(parent, ModalityType.DOCUMENT_MODAL);
 
-        this.mod = mod;
-        this.instance = instance;
+        this.project = mod;
+        this.instanceOrServer = instanceOrServer;
 
         setupComponents();
     }
 
     public ModrinthVersionSelectorDialog(Window parent, ModrinthProject mod, List<ModrinthVersion> versions,
-            Instance instance, String installedVersionId) {
+        ModManagement instanceOrServer, String installedVersionId) {
         super(parent, ModalityType.DOCUMENT_MODAL);
 
-        this.mod = mod;
+        this.project = mod;
         this.versionsData = versions;
-        this.instance = instance;
+        this.instanceOrServer = instanceOrServer;
         this.installedVersionId = installedVersionId;
 
         setupComponents();
     }
 
-    public ModrinthVersionSelectorDialog(Window parent, ModrinthProject mod, Instance instance,
-            String installedVersionId) {
+    public ModrinthVersionSelectorDialog(Window parent, ModrinthProject mod, ModManagement instanceOrServer,
+        String installedVersionId, boolean selectNewest) {
         super(parent, ModalityType.DOCUMENT_MODAL);
 
-        this.mod = mod;
-        this.instance = instance;
-        this.installedVersionId = installedVersionId;
-
-        setupComponents();
-    }
-
-    public ModrinthVersionSelectorDialog(Window parent, ModrinthProject mod, Instance instance,
-            String installedVersionId, boolean selectNewest) {
-        super(parent, ModalityType.DOCUMENT_MODAL);
-
-        this.mod = mod;
-        this.instance = instance;
+        this.project = mod;
+        this.instanceOrServer = instanceOrServer;
         this.installedVersionId = installedVersionId;
         this.selectNewest = selectNewest;
 
@@ -140,53 +132,70 @@ public class ModrinthVersionSelectorDialog extends JDialog {
         dependenciesPanel.setVisible(false);
 
         List<ModrinthDependency> dependencies = selectedFile.dependencies.stream().filter(d -> d.projectId != null)
-                .collect(Collectors.toList());
+            .collect(Collectors.toList());
 
         // this file has dependencies
-        if (dependencies.size() != 0) {
+        if (!dependencies.isEmpty()) {
             // check to see which required ones we don't already have
             List<ModrinthDependency> dependenciesNeeded = dependencies.stream()
-                    .filter(dependency -> dependency.dependencyType == ModrinthDependencyType.REQUIRED
-                            && instance.launcher.mods.stream()
-                                    .noneMatch(installedMod -> {
-                                        // don't show Modrinth dependency when grabbed from CurseForge
-                                        if (dependency.projectId.equals(Constants.MODRINTH_FABRIC_MOD_ID)
-                                                && installedMod.isFromCurseForge()
-                                                && installedMod
-                                                        .getCurseForgeFileId() == Constants.CURSEFORGE_FABRIC_MOD_ID) {
-                                            return true;
-                                        }
+                .filter(dependency -> dependency.dependencyType == ModrinthDependencyType.REQUIRED)
+                .filter(dependency -> {
+                    if (!dependency.projectId.equals(Constants.MODRINTH_FABRIC_MOD_ID)) {
+                        return true;
+                    }
 
-                                        // don't show Modrinth dependency when grabbed from CurseForge
-                                        if (dependency.projectId.equals(Constants.MODRINTH_LEGACY_FABRIC_MOD_ID)
-                                                && installedMod.isFromCurseForge()
-                                                && installedMod
-                                                        .getCurseForgeFileId() == Constants.CURSEFORGE_LEGACY_FABRIC_MOD_ID) {
-                                            return true;
-                                        }
+                    // We shouldn't install Fabric API when using Sinytra Connector
+                    return instanceOrServer instanceof Server
+                        || !((Instance) instanceOrServer).isForgeLikeAndHasInstalledSinytraConnector();
+                })
+                .filter(dependency -> instanceOrServer.getMods().stream()
+                    .noneMatch(installedMod -> {
+                        // don't show Modrinth dependency when grabbed from CurseForge
+                        if (dependency.projectId.equals(Constants.MODRINTH_FABRIC_MOD_ID)
+                            && installedMod.isFromCurseForge()
+                            && installedMod
+                            .getCurseForgeFileId() == Constants.CURSEFORGE_FABRIC_MOD_ID) {
+                            return true;
+                        }
 
-                                        // don't show Fabric dependency when QSL is installed
-                                        if (dependency.projectId.equals(Constants.MODRINTH_FABRIC_MOD_ID)
-                                                && installedMod.isFromModrinth()
-                                                && installedMod.modrinthProject.id
-                                                        .equals(Constants.MODRINTH_QSL_MOD_ID)) {
-                                            return true;
-                                        }
+                        // don't show Modrinth dependency when grabbed from CurseForge
+                        if (dependency.projectId.equals(Constants.MODRINTH_LEGACY_FABRIC_MOD_ID)
+                            && installedMod.isFromCurseForge()
+                            && installedMod
+                            .getCurseForgeFileId() == Constants.CURSEFORGE_LEGACY_FABRIC_MOD_ID) {
+                            return true;
+                        }
 
-                                        return installedMod.isFromModrinth()
-                                                && installedMod.modrinthProject.id.equals(dependency.projectId);
-                                    }))
-                    .collect(Collectors.toList());
+                        // don't show Fabric dependency when QSL is installed
+                        if (dependency.projectId.equals(Constants.MODRINTH_FABRIC_MOD_ID)
+                            && installedMod.isFromModrinth()
+                            && installedMod.modrinthProject.id
+                            .equals(Constants.MODRINTH_QSL_MOD_ID)) {
+                            return true;
+                        }
 
-            if (dependenciesNeeded.size() != 0) {
+                        // don't show Modrinth dependency when grabbed from CurseForge
+                        if (dependency.projectId.equals(Constants.MODRINTH_FORGIFIED_FABRIC_API_MOD_ID)
+                            && installedMod.isFromCurseForge()
+                            && installedMod
+                            .getCurseForgeFileId() == Constants.CURSEFORGE_FORGIFIED_FABRIC_API_MOD_ID) {
+                            return true;
+                        }
+
+                        return installedMod.isFromModrinth()
+                            && installedMod.modrinthProject.id.equals(dependency.projectId);
+                    }))
+                .collect(Collectors.toList());
+
+            if (!dependenciesNeeded.isEmpty()) {
                 dependenciesPanel.removeAll();
 
                 dependenciesNeeded.forEach(dependency -> dependenciesPanel
-                        .add(new ModrinthProjectDependencyCard(this, dependency, instance)));
+                    .add(new ModrinthProjectDependencyCard(this, dependency, instanceOrServer)));
 
                 dependenciesPanel
-                        .setLayout(new GridLayout(dependenciesNeeded.size() < 2 ? 1 : dependenciesNeeded.size() / 2,
-                                (dependenciesNeeded.size() / 2) + 1));
+                    .setLayout(new GridLayout(dependenciesNeeded.size() < 2 ? 1 : dependenciesNeeded.size() / 2,
+                        (dependenciesNeeded.size() / 2) + 1));
 
                 setSize(550, 450);
                 setLocationRelativeTo(App.launcher.getParent());
@@ -204,10 +213,8 @@ public class ModrinthVersionSelectorDialog extends JDialog {
     }
 
     private void setupComponents() {
-        Analytics.sendScreenView("Modrinth Version Selector Dialog");
-
         // #. {0} is the name of the mod we're installing
-        setTitle(GetText.tr("Installing {0}", mod.title));
+        setTitle(GetText.tr("Installing {0}", project.title));
 
         setSize(550, 200);
         setMinimumSize(new Dimension(550, 200));
@@ -220,6 +227,15 @@ public class ModrinthVersionSelectorDialog extends JDialog {
         addButton.setEnabled(false);
 
         viewModButton = new JButton(GetText.tr("View Mod"));
+        if (instanceOrServer.getLoaderVersion() != null && ((instanceOrServer.getLoaderVersion().isPaper()
+            && (project.projectType == ModrinthProjectType.PLUGIN || project.loaders.contains("paper")
+            || project.loaders.contains("bukkit") || project.loaders.contains("spigot")))
+            || (instanceOrServer.getLoaderVersion().isPurpur()
+            && (project.projectType == ModrinthProjectType.PLUGIN || project.loaders.contains("purpur")
+            || project.loaders.contains("paper")
+            || project.loaders.contains("bukkit") || project.loaders.contains("spigot"))))) {
+            viewModButton.setText(GetText.tr("View Plugin"));
+        }
         viewModButton.setEnabled(false);
 
         viewFileButton = new JButton(GetText.tr("View File"));
@@ -227,12 +243,12 @@ public class ModrinthVersionSelectorDialog extends JDialog {
 
         dependenciesPanel.setVisible(false);
         dependenciesPanel
-                .setBorder(BorderFactory.createTitledBorder(GetText.tr("The below mods need to be installed")));
+            .setBorder(BorderFactory.createTitledBorder(GetText.tr("The below mods need to be installed")));
 
         // Top Panel Stuff
         JPanel top = new JPanel(new BorderLayout());
         // #. {0} is the name of the mod we're installing
-        top.add(new JLabel(GetText.tr("Installing {0}", mod.title), JLabel.CENTER), BorderLayout.NORTH);
+        top.add(new JLabel(GetText.tr("Installing {0}", project.title), JLabel.CENTER), BorderLayout.NORTH);
 
         installedJLabel = new JLabel("", JLabel.CENTER);
         top.add(installedJLabel, BorderLayout.SOUTH);
@@ -284,29 +300,27 @@ public class ModrinthVersionSelectorDialog extends JDialog {
         addButton.addActionListener(e -> {
             ModrinthVersion version = (ModrinthVersion) versionsDropdown.getSelectedItem();
             ModrinthFile file = filesDropdown.getSelectedItem() == null ? null
-                    : ((ComboItem<ModrinthFile>) filesDropdown.getSelectedItem()).getValue();
+                : ((ComboItem<ModrinthFile>) filesDropdown.getSelectedItem()).getValue();
 
-            ProgressDialog progressDialog = new ProgressDialog<>(
-                    // #. {0} is the name of the mod we're installing
-                    GetText.tr("Installing {0}", version.name), true, this);
+            ProgressDialog<Void> progressDialog = new ProgressDialog<>(
+                // #. {0} is the name of the mod we're installing
+                GetText.tr("Installing {0}", version.name), true, this);
             progressDialog.addThread(new Thread(() -> {
-                Analytics.sendEvent(mod.title + " - " + version.name, "AddFile", "ModrinthMod");
-                instance.addFileFromModrinth(mod, version, file, progressDialog);
-
+                Analytics.trackEvent(project.getAnalyticsEventForAdded(version));
+                instanceOrServer.addFileFromModrinth(project, version, file, progressDialog);
                 progressDialog.close();
             }));
             progressDialog.start();
             dispose();
         });
 
-        viewModButton.addActionListener(e -> {
-            OS.openWebBrowser(String.format("https://modrinth.com/mod/%s", mod.slug));
-        });
+        viewModButton
+            .addActionListener(e -> OS.openWebBrowser(String.format("https://modrinth.com/mod/%s", project.slug)));
 
         viewFileButton.addActionListener(e -> {
             ModrinthVersion version = (ModrinthVersion) versionsDropdown.getSelectedItem();
 
-            OS.openWebBrowser(String.format("https://modrinth.com/mod/%s/version/%s", mod.slug, version.id));
+            OS.openWebBrowser(String.format("https://modrinth.com/mod/%s/version/%s", project.slug, version.id));
         });
 
         versionsDropdown.addActionListener(e -> {
@@ -320,7 +334,7 @@ public class ModrinthVersionSelectorDialog extends JDialog {
                     int selectedIndex = 0;
 
                     for (ModrinthFile file : version.files) {
-                        filesDropdown.addItem(new ComboItem<ModrinthFile>(file, file.toString()));
+                        filesDropdown.addItem(new ComboItem<>(file, file.toString()));
 
                         if (file.primary) {
                             selectedIndex = filesDropdown.getItemCount() - 1;
@@ -328,7 +342,7 @@ public class ModrinthVersionSelectorDialog extends JDialog {
 
                         // ensures that font width is taken into account
                         filesLength = Math.max(filesLength,
-                                getFontMetrics(App.THEME.getNormalFont()).stringWidth(file.toString()) + 100);
+                            getFontMetrics(App.THEME.getNormalFont()).stringWidth(file.toString()) + 100);
                     }
 
                     // ensures that the dropdown is at least 200 px wide and has a maximum width of
@@ -351,7 +365,6 @@ public class ModrinthVersionSelectorDialog extends JDialog {
         add(top, BorderLayout.NORTH);
         add(middle, BorderLayout.CENTER);
         add(bottom, BorderLayout.SOUTH);
-        setVisible(true);
     }
 
     protected void getFiles() {
@@ -360,32 +373,78 @@ public class ModrinthVersionSelectorDialog extends JDialog {
 
         Runnable r = () -> {
             if (this.versionsData == null) {
-                this.versionsData = ModrinthApi.getVersions(mod.id);
+                this.versionsData = ModrinthApi.getVersions(project.id);
+            }
+
+            if (this.versionsData == null) {
+                DialogManager.okDialog().setParent(ModrinthVersionSelectorDialog.this).setTitle("No versions found")
+                    .setContent("No versions found for this mod").setType(DialogManager.ERROR).show();
+                dispose();
+                return;
             }
 
             Stream<ModrinthVersion> modrinthVersionsStream = this.versionsData.stream()
-                    .sorted(Comparator.comparing((ModrinthVersion version) -> version.datePublished).reversed());
+                .sorted(Comparator.comparing((ModrinthVersion version) -> version.datePublished).reversed());
 
-            if (App.settings.addModRestriction != AddModRestriction.NONE
-                    && this.instance.launcher.loaderVersion != null && mod.projectType == ModrinthProjectType.MOD) {
-                modrinthVersionsStream = modrinthVersionsStream
-                        .filter(v -> (this.instance.launcher.loaderVersion.isFabric()
-                                || this.instance.launcher.loaderVersion.isLegacyFabric()) ? v.loaders.contains("fabric")
-                                        : (this.instance.launcher.loaderVersion.isQuilt()
-                                                ? (v.loaders.contains("quilt") || v.loaders.contains("fabric"))
-                                                : v.loaders.contains("forge")));
+            LoaderVersion loaderVersion = instanceOrServer.getLoaderVersion();
+            String minecraftVersion = instanceOrServer.getMinecraftVersion();
+
+            if (App.settings.addModRestriction != AddModRestriction.NONE && loaderVersion != null
+                && project.projectType == ModrinthProjectType.MOD) {
+                List<String> neoForgeForgeCompatabilityVersions = ConfigManager
+                    .getConfigItem("loaders.neoforge.forgeCompatibleMinecraftVersions", new ArrayList<>());
+                boolean hasNeoForgeVersion = this.versionsData.stream()
+                    .anyMatch(v -> v.loaders.contains("neoforge")
+                        || (neoForgeForgeCompatabilityVersions.contains(minecraftVersion)
+                        && v.loaders.contains("forge")));
+                boolean hasForgeVersion = this.versionsData.stream().anyMatch(v -> v.loaders.contains("forge"));
+                modrinthVersionsStream = modrinthVersionsStream.filter(v -> {
+                    if (v.loaders.contains("fabric")
+                        && (loaderVersion.isFabric()
+                        || loaderVersion.isLegacyFabric()
+                        || loaderVersion.isQuilt()
+                        || (instanceOrServer.isForgeLikeAndHasInstalledSinytraConnector()
+                        && loaderVersion.isForge() && !hasForgeVersion)
+                        || (instanceOrServer.isForgeLikeAndHasInstalledSinytraConnector()
+                        && loaderVersion.isNeoForge() && !hasNeoForgeVersion))) {
+                        return true;
+                    }
+
+                    if (v.loaders.contains("neoforge") && loaderVersion.isNeoForge()) {
+                        return true;
+                    }
+
+                    if ((v.loaders.contains("paper") || v.loaders.contains("bukkit") || v.loaders.contains("spigot"))
+                        && loaderVersion.isPaper()) {
+                        return true;
+                    }
+
+                    if ((v.loaders.contains("purpur") || v.loaders.contains("paper") || v.loaders.contains("bukkit")
+                        || v.loaders.contains("spigot"))
+                        && loaderVersion.isPurpur()) {
+                        return true;
+                    }
+
+                    if (v.loaders.contains("forge") && (loaderVersion.isForge()
+                        || (loaderVersion.isNeoForge()
+                        && neoForgeForgeCompatabilityVersions.contains(minecraftVersion)))) {
+                        return true;
+                    }
+
+                    return v.loaders.contains("quilt") && loaderVersion.isQuilt();
+                });
             }
 
             if (App.settings.addModRestriction == AddModRestriction.STRICT) {
-                modrinthVersionsStream = modrinthVersionsStream.filter(v -> v.gameVersions.contains(this.instance.id));
+                modrinthVersionsStream = modrinthVersionsStream.filter(v -> v.gameVersions.contains(minecraftVersion));
             } else if (App.settings.addModRestriction == AddModRestriction.LAX) {
                 try {
                     List<String> minecraftVersionsToSearch = MinecraftManager
-                            .getMajorMinecraftVersions(this.instance.id).stream().map(mv -> mv.id)
-                            .collect(Collectors.toList());
+                        .getMajorMinecraftVersions(minecraftVersion).stream().map(mv -> mv.id)
+                        .collect(Collectors.toList());
 
                     modrinthVersionsStream = modrinthVersionsStream.filter(
-                            v -> v.gameVersions.stream().anyMatch(gv -> minecraftVersionsToSearch.contains(gv)));
+                        v -> v.gameVersions.stream().anyMatch(minecraftVersionsToSearch::contains));
                 } catch (InvalidMinecraftVersion e) {
                     LogManager.logStackTrace(e);
                 }
@@ -396,7 +455,7 @@ public class ModrinthVersionSelectorDialog extends JDialog {
             // ensures that font width is taken into account
             for (ModrinthVersion version : versions) {
                 versionsLength = Math.max(versionsLength,
-                        getFontMetrics(App.THEME.getNormalFont()).stringWidth(version.name) + 100);
+                    getFontMetrics(App.THEME.getNormalFont()).stringWidth(version.name) + 100);
             }
 
             versionsDropdown.removeAllItems();
@@ -405,13 +464,13 @@ public class ModrinthVersionSelectorDialog extends JDialog {
 
             if (versionsDropdown.getItemCount() == 0) {
                 DialogManager.okDialog().setParent(ModrinthVersionSelectorDialog.this).setTitle("No versions found")
-                        .setContent("No versions found for this mod").setType(DialogManager.ERROR).show();
+                    .setContent("No versions found for this mod").setType(DialogManager.ERROR).show();
                 dispose();
             }
 
             if (this.installedVersionId != null) {
                 ModrinthVersion installedFile = versions.stream()
-                        .filter(f -> f.id.equalsIgnoreCase(this.installedVersionId)).findFirst().orElse(null);
+                    .filter(f -> f.id.equalsIgnoreCase(this.installedVersionId)).findFirst().orElse(null);
 
                 if (installedFile != null) {
                     if (!selectNewest) {

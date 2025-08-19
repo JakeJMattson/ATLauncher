@@ -26,7 +26,6 @@ import java.awt.GridBagLayout;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.io.File;
-import java.io.FilenameFilter;
 
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
@@ -48,13 +47,14 @@ import com.atlauncher.FileSystem;
 import com.atlauncher.builders.HTMLBuilder;
 import com.atlauncher.constants.UIConstants;
 import com.atlauncher.dbus.DBusUtils;
+import com.atlauncher.managers.AccountManager;
 import com.atlauncher.managers.DialogManager;
 import com.atlauncher.network.Analytics;
+import com.atlauncher.network.analytics.AnalyticsEvent;
 import com.atlauncher.utils.ImportPackUtils;
 import com.atlauncher.utils.OS;
 import com.atlauncher.utils.Utils;
 
-@SuppressWarnings("serial")
 public class ImportInstanceDialog extends JDialog {
 
     private final JTextField url;
@@ -80,7 +80,7 @@ public class ImportInstanceDialog extends JDialog {
 
         JEditorPane infoMessage = new JEditorPane("text/html", new HTMLBuilder().center().text(GetText.tr(
                 "Select a zip/mrpack file to import it.<br/>We currently support CurseForge, Modrinth and MultiMC exported files/urls, as well as CurseForge.com links."))
-                .build());
+            .build());
         infoMessage.setEditable(false);
         middle.add(infoMessage, BorderLayout.NORTH);
 
@@ -145,15 +145,12 @@ public class ImportInstanceDialog extends JDialog {
                 }
             } else if (App.settings.useNativeFilePicker) {
                 FileDialog fileDialog = new FileDialog(this, GetText.tr("Select file/s"), FileDialog.LOAD);
-                fileDialog.setFilenameFilter(new FilenameFilter() {
-                    @Override
-                    public boolean accept(File f, String name) {
-                        if (f.isDirectory()) {
-                            return true;
-                        }
-
-                        return f.getName().endsWith(".zip");
+                fileDialog.setFilenameFilter((f, name) -> {
+                    if (f.isDirectory()) {
+                        return true;
                     }
+
+                    return f.getName().endsWith(".zip");
                 });
                 fileDialog.setVisible(true);
 
@@ -199,17 +196,29 @@ public class ImportInstanceDialog extends JDialog {
         bottom.setLayout(new FlowLayout());
         addButton = new JButton(GetText.tr("Import"));
         addButton.addActionListener(e -> {
+            if (AccountManager.getSelectedAccount() == null) {
+                DialogManager.okDialog().setTitle(GetText.tr("No Account Selected"))
+                    .setContent(GetText.tr("Cannot create instance as you have no account selected."))
+                    .setType(DialogManager.ERROR).show();
+
+                if (AccountManager.getAccounts().isEmpty()) {
+                    App.navigate(UIConstants.LAUNCHER_ACCOUNTS_TAB);
+                }
+                return;
+            }
+
             setVisible(false);
 
             final ProgressDialog<Boolean> dialog = new ProgressDialog<>(GetText.tr("Import Instance"), 0,
-                    GetText.tr("Import Instance"), this);
+                GetText.tr("Import Instance"), this);
 
             dialog.addThread(new Thread(() -> {
                 if (!url.getText().isEmpty()) {
-                    Analytics.sendEvent(url.getText(), "AddFromUrl", "ImportInstance");
+                    Analytics.trackEvent(AnalyticsEvent.forImportInstance("Url", url.getText()));
                     dialog.setReturnValue(ImportPackUtils.loadFromUrl(url.getText()));
                 } else if (!filePath.getText().isEmpty()) {
-                    Analytics.sendEvent(new File(filePath.getText()).getName(), "AddFromZip", "ImportInstance");
+                    Analytics.trackEvent(
+                        AnalyticsEvent.forImportInstance("Archive", new File(filePath.getText()).getName()));
                     dialog.setReturnValue(ImportPackUtils.loadFromFile(new File(filePath.getText())));
                 } else {
                     dialog.setReturnValue(false);
@@ -219,12 +228,12 @@ public class ImportInstanceDialog extends JDialog {
 
             dialog.start();
 
-            if (!dialog.getReturnValue()) {
+            if (!Boolean.TRUE.equals(dialog.getReturnValue())) {
                 DialogManager.okDialog().setTitle(GetText.tr("Failed To Import Instance"))
-                        .setContent(new HTMLBuilder().center().text(GetText.tr(
-                                "An error occured when trying to import an instance.<br/><br/>Check the console for more information."))
-                                .build())
-                        .setType(DialogManager.ERROR).show();
+                    .setContent(new HTMLBuilder().center().text(GetText.tr(
+                            "An error occured when trying to import an instance.<br/><br/>Check the console for more information."))
+                        .build())
+                    .setType(DialogManager.ERROR).show();
                 setVisible(true);
             } else {
                 dispose();
@@ -236,6 +245,7 @@ public class ImportInstanceDialog extends JDialog {
         add(bottom, BorderLayout.SOUTH);
 
         addWindowListener(new WindowAdapter() {
+            @Override
             public void windowClosing(WindowEvent arg0) {
                 setVisible(false);
                 dispose();

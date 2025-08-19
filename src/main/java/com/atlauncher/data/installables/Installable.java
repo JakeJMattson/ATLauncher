@@ -24,6 +24,7 @@ import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.concurrent.ExecutionException;
 
@@ -40,9 +41,9 @@ import com.atlauncher.data.Instance;
 import com.atlauncher.data.Pack;
 import com.atlauncher.data.PackVersion;
 import com.atlauncher.data.curseforge.pack.CurseForgeManifest;
+import com.atlauncher.data.ftb.FTBPackManifest;
 import com.atlauncher.data.minecraft.VersionManifestVersion;
 import com.atlauncher.data.minecraft.loaders.LoaderVersion;
-import com.atlauncher.data.modpacksch.ModpacksChPackManifest;
 import com.atlauncher.data.modrinth.ModrinthProject;
 import com.atlauncher.data.modrinth.pack.ModrinthModpackManifest;
 import com.atlauncher.data.multimc.MultiMCManifest;
@@ -73,7 +74,7 @@ public abstract class Installable {
     public ModrinthProject modrinthProject;
     public ModrinthModpackManifest modrinthManifest;
     public Path modrinthExtractedPath;
-    public ModpacksChPackManifest modpacksChPackManifest;
+    public FTBPackManifest ftbPackManifest;
     public MultiMCManifest multiMCManifest;
     public Path multiMCExtractedPath;
     public TechnicModpack technicModpack;
@@ -90,7 +91,7 @@ public abstract class Installable {
                     .text(GetText.tr("An instance already exists with that name.<br/><br/>Rename it and try again."))
                     .build()).setType(DialogManager.ERROR).show();
             return false;
-        } else if (!isReinstall && !isServer && instanceName.replaceAll("[^A-Za-z0-9]", "").length() == 0) {
+        } else if (!isReinstall && !isServer && instanceName.replaceAll("[^A-Za-z0-9]", "").isEmpty()) {
             DialogManager.okDialog().setTitle(GetText.tr("Error"))
                     .setContent(new HTMLBuilder().center()
                             .text(GetText.tr("Instance name is invalid. It must contain at least 1 letter or number."))
@@ -102,7 +103,7 @@ public abstract class Installable {
                     .text(GetText.tr("A server already exists with that name.<br/><br/>Rename it and try again."))
                     .build()).setType(DialogManager.ERROR).show();
             return false;
-        } else if (!isReinstall && isServer && instanceName.replaceAll("[^A-Za-z0-9]", "").length() == 0) {
+        } else if (!isReinstall && isServer && instanceName.replaceAll("[^A-Za-z0-9]", "").isEmpty()) {
             DialogManager.okDialog().setTitle(GetText.tr("Error"))
                     .setContent(new HTMLBuilder().center()
                             .text(GetText.tr("Server name is invalid. It must contain at least 1 letter or number."))
@@ -162,10 +163,11 @@ public abstract class Installable {
         boolean saveMods = !isServer && isReinstall && this.saveMods;
 
         final InstanceInstaller instanceInstaller = new InstanceInstaller(instanceName, pack, version, isReinstall,
-                isServer, changingLoader, saveMods, null, showModsChooser, loaderVersion, curseForgeManifest,
-                curseExtractedPath, modpacksChPackManifest, modrinthManifest, modrinthExtractedPath, multiMCManifest,
+                isServer, changingLoader, saveMods, showModsChooser, loaderVersion, curseForgeManifest,
+                curseExtractedPath, ftbPackManifest, modrinthManifest, modrinthExtractedPath, multiMCManifest,
                 multiMCExtractedPath, technicModpack, dialog) {
 
+            @Override
             protected void done() {
                 Boolean success = false;
                 int type;
@@ -186,7 +188,6 @@ public abstract class Installable {
                             instance.launcher.isPlayable = false;
                             instance.save();
 
-                            App.launcher.reloadInstancesPanel();
                         }
                     } else if (isReinstall) {
                         // #. {0} is the pack name and {1} is the pack version
@@ -200,7 +201,6 @@ public abstract class Installable {
                             instance.launcher.isPlayable = false;
                             instance.save();
 
-                            App.launcher.reloadInstancesPanel();
                         }
                     } else {
                         // #. {0} is the pack name and {1} is the pack version
@@ -250,12 +250,6 @@ public abstract class Installable {
                             // #. {0} is the pack name and {1} is the pack version
                             text = GetText.tr("{0} {1} has been installed.<br/><br/>Find it in the instances tab.",
                                     pack.getName(), version.version);
-                        }
-
-                        if (isServer) {
-                            App.launcher.reloadServersPanel();
-                        } else {
-                            App.launcher.reloadInstancesPanel();
                         }
 
                         if (pack.isLoggingEnabled() && App.settings.enableLogs && !version.isDev) {
@@ -318,7 +312,7 @@ public abstract class Installable {
         };
 
         instanceInstaller.addPropertyChangeListener(evt -> {
-            if ("progress" == evt.getPropertyName()) {
+            if ("progress".equals(evt.getPropertyName())) {
                 if (progressBar.isIndeterminate()) {
                     progressBar.setIndeterminate(false);
                 }
@@ -332,7 +326,7 @@ public abstract class Installable {
                     progress = 100.0;
                 }
                 progressBar.setValue((int) Math.round(progress * 100.0));
-            } else if ("subprogress" == evt.getPropertyName()) {
+            } else if ("subprogress".equals(evt.getPropertyName())) {
                 if (!subProgressBar.isVisible()) {
                     subProgressBar.setVisible(true);
                 }
@@ -367,10 +361,10 @@ public abstract class Installable {
                     }
                 }
                 if (paint == null && progress > 0.0) {
-                    subProgressBar.setString(String.format("%.2f%%", progress));
+                    subProgressBar.setString(String.format(Locale.ENGLISH, "%.2f%%", progress));
                 }
                 subProgressBar.setValue((int) Math.round(progress * 100.0));
-            } else if ("subprogressint" == evt.getPropertyName()) {
+            } else if ("subprogressint".equals(evt.getPropertyName())) {
                 if (subProgressBar.isStringPainted()) {
                     subProgressBar.setStringPainted(false);
                 }
@@ -380,13 +374,14 @@ public abstract class Installable {
                 if (!subProgressBar.isIndeterminate()) {
                     subProgressBar.setIndeterminate(true);
                 }
-            } else if ("doing" == evt.getPropertyName()) {
+            } else if ("doing".equals(evt.getPropertyName())) {
                 String doingText = (String) evt.getNewValue();
                 doing.setText(doingText);
             }
         });
 
         dialog.addWindowListener(new WindowAdapter() {
+            @Override
             public void windowClosing(WindowEvent e) {
                 instanceInstaller.cancel(true);
             }

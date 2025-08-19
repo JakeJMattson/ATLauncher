@@ -54,7 +54,6 @@ import com.atlauncher.utils.Hashing;
 import com.atlauncher.utils.ModrinthApi;
 import com.atlauncher.utils.Utils;
 
-@SuppressWarnings("serial")
 public class ModsJCheckBoxTransferHandler extends TransferHandler {
     private final EditModsDialog dialog;
     private final boolean disabled;
@@ -64,19 +63,22 @@ public class ModsJCheckBoxTransferHandler extends TransferHandler {
         this.disabled = disabled;
     }
 
+    @Override
     public int getSourceActions(JComponent c) {
         return COPY;
     }
 
+    @Override
     public boolean canImport(TransferSupport ts) {
         return ts.isDataFlavorSupported(DataFlavor.javaFileListFlavor);
     }
 
+    @Override
     public boolean importData(TransferSupport ts) {
         try {
             @SuppressWarnings("unchecked")
             final List<File> data = (List<File>) ts.getTransferable().getTransferData(DataFlavor.javaFileListFlavor);
-            if (data.size() < 1) {
+            if (data.isEmpty()) {
                 return false;
             }
 
@@ -85,14 +87,15 @@ public class ModsJCheckBoxTransferHandler extends TransferHandler {
 
             String[] modTypes = new String[] { "Mods Folder", "Resource Pack", "Shader Pack", "Inside Minecraft.jar" };
 
-            FileTypeDialog fcd = new FileTypeDialog(GetText.tr("Add Mod"), GetText.tr("Adding Mods"), GetText.tr("Add"),
+            FileTypeDialog ftd = new FileTypeDialog(GetText.tr("Add Mod"), GetText.tr("Adding Mods"), GetText.tr("Add"),
                     GetText.tr("Type"), modTypes);
+            ftd.setVisible(true);
 
-            if (fcd.wasClosed()) {
+            if (ftd.wasClosed()) {
                 return false;
             }
 
-            String typeTemp = fcd.getSelectorValue();
+            String typeTemp = ftd.getSelectorValue();
 
             if (typeTemp.equalsIgnoreCase("Inside Minecraft.jar")) {
                 int ret = DialogManager.yesNoDialog().setTitle(GetText.tr("Add As Mod?"))
@@ -103,71 +106,70 @@ public class ModsJCheckBoxTransferHandler extends TransferHandler {
 
                 if (ret != 0) {
                     type = Type.jar;
-                    instanceFile = dialog.instance.ROOT.resolve("jarmods").toFile();
+                    instanceFile = dialog.instanceOrServer.getRoot().resolve("jarmods").toFile();
                 } else {
                     type = Type.mods;
-                    instanceFile = dialog.instance.ROOT.resolve("mods").toFile();
+                    instanceFile = dialog.instanceOrServer.getRoot().resolve("mods").toFile();
                 }
             } else if (typeTemp.equalsIgnoreCase("CoreMods Mod")) {
                 type = Type.coremods;
-                instanceFile = dialog.instance.ROOT.resolve("coremods").toFile();
+                instanceFile = dialog.instanceOrServer.getRoot().resolve("coremods").toFile();
             } else if (typeTemp.equalsIgnoreCase("Texture Pack")) {
                 type = Type.texturepack;
-                instanceFile = dialog.instance.ROOT.resolve("texturepacks").toFile();
+                instanceFile = dialog.instanceOrServer.getRoot().resolve("texturepacks").toFile();
             } else if (typeTemp.equalsIgnoreCase("Resource Pack")) {
                 type = Type.resourcepack;
-                instanceFile = dialog.instance.ROOT.resolve("resourcepacks").toFile();
+                instanceFile = dialog.instanceOrServer.getRoot().resolve("resourcepacks").toFile();
             } else if (typeTemp.equalsIgnoreCase("Shader Pack")) {
                 type = Type.shaderpack;
-                instanceFile = dialog.instance.ROOT.resolve("shaderpacks").toFile();
+                instanceFile = dialog.instanceOrServer.getRoot().resolve("shaderpacks").toFile();
             } else {
                 type = Type.mods;
-                instanceFile = dialog.instance.ROOT.resolve("mods").toFile();
+                instanceFile = dialog.instanceOrServer.getRoot().resolve("mods").toFile();
             }
 
-            final ProgressDialog progressDialog = new ProgressDialog(GetText.tr("Copying Mods"), 0,
+            final ProgressDialog<Object> progressDialog = new ProgressDialog<>(GetText.tr("Copying Mods"), 0,
                     GetText.tr("Copying Mods"), dialog);
 
             progressDialog.addThread(new Thread(() -> {
                 List<DisableableMod> modsAdded = new ArrayList<>();
 
-                for (Object item : data) {
-                    File file = (File) item;
+                for (File item : data) {
                     File copyTo = instanceFile;
 
-                    if (!Utils.isAcceptedModFile(file)) {
+                    if (!Utils.isAcceptedModFile(item)) {
                         DialogManager.okDialog().setTitle(GetText.tr("Invalid File")).setContent(GetText
-                                .tr("Skipping file {0}. Only zip, jar and litemod files can be added.", file.getName()))
+                                .tr("Skipping file {0}. Only zip, jar and litemod files can be added.", item.getName()))
                                 .setType(DialogManager.ERROR).show();
                         continue;
                     }
 
                     if (this.disabled) {
-                        copyTo = dialog.instance.ROOT.resolve("disabledmods").toFile();
+                        copyTo = dialog.instanceOrServer.getRoot().resolve("disabledmods").toFile();
                     }
 
                     DisableableMod mod = new DisableableMod();
                     mod.disabled = this.disabled;
                     mod.userAdded = true;
                     mod.wasSelected = true;
-                    mod.file = file.getName();
+                    mod.file = item.getName();
                     mod.type = type;
                     mod.optional = true;
-                    mod.name = file.getName();
+                    mod.name = item.getName();
                     mod.version = "Unknown";
                     mod.description = null;
 
-                    MCMod mcMod = Utils.getMCModForFile(file);
+                    MCMod mcMod = Utils.getMCModForFile(item);
                     if (mcMod != null) {
-                        mod.name = Optional.ofNullable(mcMod.name).orElse(file.getName());
+                        mod.name = Optional.ofNullable(mcMod.name).orElse(item.getName());
                         mod.version = Optional.ofNullable(mcMod.version).orElse("Unknown");
-                        mod.description = Optional.ofNullable(mcMod.description).orElse(null);
+                        mod.description = mcMod.description;
                     } else {
-                        FabricMod fabricMod = Utils.getFabricModForFile(file);
+                        FabricMod fabricMod = Utils.getFabricModForFile(item);
                         if (fabricMod != null) {
-                            mod.name = Optional.ofNullable(fabricMod.name).orElse(file.getName());
+                            mod.name = Optional.ofNullable(fabricMod.name).orElse(item.getName());
                             mod.version = Optional.ofNullable(fabricMod.version).orElse("Unknown");
-                            mod.description = Optional.ofNullable(fabricMod.description).orElse(null);
+                            mod.description = fabricMod.description;
                         }
                     }
 
@@ -175,7 +177,7 @@ public class ModsJCheckBoxTransferHandler extends TransferHandler {
                         copyTo.mkdirs();
                     }
 
-                    if (Utils.copyFile(file, copyTo)) {
+                    if (Utils.copyFile(item, copyTo)) {
                         modsAdded.add(mod);
                     }
                 }
@@ -185,17 +187,20 @@ public class ModsJCheckBoxTransferHandler extends TransferHandler {
 
                     modsAdded.stream()
                             .filter(dm -> dm.curseForgeProject == null && dm.curseForgeFile == null)
-                            .filter(dm -> dm.getFile(dialog.instance.ROOT, dialog.instance.id) != null).forEach(dm -> {
+                            .filter(dm -> dm.getFile(dialog.instanceOrServer.getRoot(),
+                                    dialog.instanceOrServer.getMinecraftVersion()) != null)
+                            .forEach(dm -> {
                                 try {
                                     long hash = Hashing
-                                            .murmur(dm.getFile(dialog.instance.ROOT, dialog.instance.id).toPath());
+                                            .murmur(dm.getFile(dialog.instanceOrServer.getRoot(),
+                                                    dialog.instanceOrServer.getMinecraftVersion()).toPath());
                                     murmurHashes.put(hash, dm);
-                                } catch (Throwable t) {
-                                    LogManager.logStackTrace(t);
+                                } catch (IOException e) {
+                                    LogManager.logStackTrace(e);
                                 }
                             });
 
-                    if (murmurHashes.size() != 0) {
+                    if (!murmurHashes.isEmpty()) {
                         CurseForgeFingerprint fingerprintResponse = CurseForgeApi
                                 .checkFingerprints(murmurHashes.keySet().stream().toArray(Long[]::new));
 
@@ -215,22 +220,43 @@ public class ModsJCheckBoxTransferHandler extends TransferHandler {
                                                 DisableableMod dm = murmurHashes
                                                         .get(foundMod.file.packageFingerprint);
 
-                                                // add CurseForge information
-                                                dm.curseForgeProjectId = foundMod.id;
-                                                dm.curseForgeFile = foundMod.file;
-                                                dm.curseForgeFileId = foundMod.file.id;
-
                                                 CurseForgeProject curseForgeProject = foundProjects
                                                         .get(foundMod.id);
 
-                                                if (curseForgeProject != null) {
+                                                if (curseForgeProject != null && curseForgeProject.status == 4) {
+                                                    dm.curseForgeProjectId = foundMod.id;
+                                                    dm.curseForgeFile = foundMod.file;
+                                                    dm.curseForgeFileId = foundMod.file.id;
                                                     dm.curseForgeProject = curseForgeProject;
                                                     dm.name = curseForgeProject.name;
                                                     dm.description = curseForgeProject.summary;
+
+                                                    LogManager.debug("Found matching mod from CurseForge called "
+                                                            + dm.curseForgeFile.displayName);
                                                 }
 
-                                                LogManager.debug("Found matching mod from CurseForge called "
-                                                        + dm.curseForgeFile.displayName);
+                                                // reset if the file is not approved
+                                                if (curseForgeProject != null && curseForgeProject.status != 4) {
+                                                    dm.curseForgeProjectId = null;
+                                                    dm.curseForgeFile = null;
+                                                    dm.curseForgeFileId = null;
+                                                    dm.curseForgeProject = null;
+
+                                                    File path = dm.getFile(dialog.instanceOrServer);
+                                                    MCMod mcMod = Utils.getMCModForFile(path);
+                                                    if (mcMod != null) {
+                                                        dm.name = Optional.ofNullable(mcMod.name)
+                                                                .orElse(path.getName());
+                                                        dm.description = mcMod.description;
+                                                    } else {
+                                                        FabricMod fabricMod = Utils.getFabricModForFile(path);
+                                                        if (fabricMod != null) {
+                                                            dm.name = Optional.ofNullable(fabricMod.name)
+                                                                    .orElse(path.getName());
+                                                            dm.description = fabricMod.description;
+                                                        }
+                                                    }
+                                                }
                                             });
                                 }
                             }
@@ -243,24 +269,28 @@ public class ModsJCheckBoxTransferHandler extends TransferHandler {
 
                     modsAdded.stream()
                             .filter(dm -> dm.modrinthProject == null && dm.modrinthVersion == null)
-                            .filter(dm -> dm.getFile(dialog.instance.ROOT, dialog.instance.id) != null).forEach(dm -> {
+                            .filter(dm -> dm.getFile(dialog.instanceOrServer.getRoot(),
+                                    dialog.instanceOrServer.getMinecraftVersion()) != null)
+                            .forEach(dm -> {
                                 try {
                                     sha1Hashes.put(Hashing
-                                            .sha1(dm.disabled ? dm.getDisabledFile(dialog.instance).toPath()
+                                            .sha1(dm.disabled ? dm.getDisabledFile(dialog.instanceOrServer).toPath()
                                                     : dm
-                                                            .getFile(dialog.instance.ROOT, dialog.instance.id).toPath())
+                                                            .getFile(dialog.instanceOrServer.getRoot(),
+                                                                    dialog.instanceOrServer.getMinecraftVersion())
+                                                            .toPath())
                                             .toString(), dm);
                                 } catch (Throwable t) {
                                     LogManager.logStackTrace(t);
                                 }
                             });
 
-                    if (sha1Hashes.size() != 0) {
+                    if (!sha1Hashes.isEmpty()) {
                         Set<String> keys = sha1Hashes.keySet();
                         Map<String, ModrinthVersion> modrinthVersions = ModrinthApi
-                                .getVersionsFromSha1Hashes(keys.toArray(new String[keys.size()]));
+                                .getVersionsFromSha1Hashes(keys.toArray(new String[0]));
 
-                        if (modrinthVersions != null && modrinthVersions.size() != 0) {
+                        if (modrinthVersions != null && !modrinthVersions.isEmpty()) {
                             String[] projectIdsFound = modrinthVersions.values().stream().map(mv -> mv.projectId)
                                     .toArray(String[]::new);
 
@@ -298,7 +328,7 @@ public class ModsJCheckBoxTransferHandler extends TransferHandler {
                     }
                 }
 
-                dialog.instance.launcher.mods.addAll(modsAdded);
+                dialog.instanceOrServer.addMods(modsAdded);
 
                 progressDialog.close();
             }));

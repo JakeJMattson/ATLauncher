@@ -24,12 +24,9 @@ import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.BufferedReader;
 import java.io.Closeable;
-import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
-import java.io.FileReader;
-import java.io.FileWriter;
 import java.io.FilenameFilter;
 import java.io.IOException;
 import java.io.InputStream;
@@ -43,42 +40,46 @@ import java.net.NetworkInterface;
 import java.net.Proxy;
 import java.net.URI;
 import java.net.URL;
-import java.net.URLConnection;
-import java.net.URLEncoder;
 import java.nio.channels.FileChannel;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.security.InvalidKeyException;
 import java.security.Key;
+import java.util.ArrayDeque;
+import java.util.Arrays;
 import java.util.Deque;
 import java.util.EnumSet;
 import java.util.Enumeration;
+import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedList;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 import java.util.jar.JarInputStream;
 import java.util.jar.JarOutputStream;
+import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 import java.util.zip.ZipOutputStream;
 
+import javax.annotation.Nullable;
 import javax.crypto.BadPaddingException;
 import javax.crypto.Cipher;
 import javax.crypto.IllegalBlockSizeException;
 import javax.crypto.spec.SecretKeySpec;
 import javax.imageio.ImageIO;
-import javax.net.ssl.HttpsURLConnection;
 import javax.swing.ImageIcon;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.ScrollPaneConstants;
 
-import org.apache.commons.io.IOUtils;
+import org.apache.commons.compress.utils.IOUtils;
 import org.tukaani.xz.LZMAInputStream;
 import org.tukaani.xz.XZInputStream;
 
@@ -90,18 +91,22 @@ import com.atlauncher.data.minecraft.ExtractRule;
 import com.atlauncher.data.minecraft.FabricMod;
 import com.atlauncher.data.minecraft.MCMod;
 import com.atlauncher.managers.LogManager;
+import com.atlauncher.network.NetworkClient;
 import com.google.gson.reflect.TypeToken;
 
 import net.iharder.Base64;
+import okhttp3.Headers;
+import okhttp3.MediaType;
+import okhttp3.RequestBody;
 
 public class Utils {
     public static EnumSet<StandardOpenOption> WRITE = EnumSet.of(StandardOpenOption.CREATE_NEW,
-            StandardOpenOption.WRITE);
+        StandardOpenOption.WRITE);
     public static EnumSet<StandardOpenOption> READ = EnumSet.of(StandardOpenOption.READ);
 
     public static JScrollPane wrapInVerticalScroller(final JPanel panel, final int scrollUnits) {
         final JScrollPane scroller = new JScrollPane(panel, ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED,
-                ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+            ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
         scroller.getVerticalScrollBar().setUnitIncrement(scrollUnits);
         return scroller;
     }
@@ -141,12 +146,13 @@ public class Utils {
     public static File getOSStorageDir() {
         switch (OS.getOS()) {
             case WINDOWS:
-                return new File(System.getenv("APPDATA"), "/." + Constants.LAUNCHER_NAME.toLowerCase());
+                return new File(System.getenv("APPDATA"), "/." + Constants.LAUNCHER_NAME.toLowerCase(Locale.ENGLISH));
             case OSX:
                 return new File(System.getProperty("user.home"),
-                        "/Library/Application Support/." + Constants.LAUNCHER_NAME.toLowerCase());
+                    "/Library/Application Support/." + Constants.LAUNCHER_NAME.toLowerCase(Locale.ENGLISH));
             default:
-                return new File(System.getProperty("user.home"), "/." + Constants.LAUNCHER_NAME.toLowerCase());
+                return new File(System.getProperty("user.home"),
+                    "/." + Constants.LAUNCHER_NAME.toLowerCase(Locale.ENGLISH));
         }
     }
 
@@ -177,16 +183,10 @@ public class Utils {
             name += ".png";
         }
 
-        InputStream stream = App.class.getResourceAsStream(name);
-
-        if (stream == null) {
-            throw new NullPointerException("Stream == null");
-        }
-
-        try {
-            return ImageIO.read(stream);
+        try (InputStream inputStream = App.class.getResourceAsStream(name)) {
+            return ImageIO.read(inputStream);
         } catch (IOException e) {
-            LogManager.logStackTrace("Failed to read image", e);
+            LogManager.logStackTrace("Failed to get resource input stream for path: " + name, e);
             return null;
         }
     }
@@ -200,34 +200,18 @@ public class Utils {
      *
      * @param title the title
      * @param log   the log
-     * @return the string
+     * @return the url of the paste
      */
+    @Nullable
     public static String uploadPaste(String title, String log) {
-        String line;
-        String result = "";
-        try {
-            String urlParameters = "";
-            urlParameters += "title=" + URLEncoder.encode(title, "ISO-8859-1") + "&";
-            urlParameters += "language=" + URLEncoder.encode("text", "ISO-8859-1") + "&";
-            urlParameters += "private=" + URLEncoder.encode("1", "ISO-8859-1") + "&";
-            urlParameters += "text=" + URLEncoder.encode(log, "ISO-8859-1");
-            URL url = new URL(Constants.PASTE_API_URL);
-            URLConnection conn = url.openConnection();
-            conn.addRequestProperty("User-Agent", Network.USER_AGENT);
-            conn.setDoOutput(true);
-            OutputStreamWriter writer = new OutputStreamWriter(conn.getOutputStream());
-            writer.write(urlParameters);
-            writer.flush();
-            BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
-            while ((line = reader.readLine()) != null) {
-                result = line;
-            }
-            writer.close();
-            reader.close();
-        } catch (IOException e1) {
-            LogManager.logStackTrace(e1);
-        }
-        return result;
+        Map<Object, Object> data = new HashMap<>();
+        data.put("title", title);
+        data.put("text", log);
+
+        return NetworkClient.post(Constants.PASTE_API_URL,
+            Headers.of("Content-Type", "application/json"),
+            RequestBody.create(Gsons.DEFAULT.toJson(data), MediaType.get("application/json; charset=utf-8")),
+            String.class);
     }
 
     /**
@@ -274,13 +258,13 @@ public class Utils {
         if (!from.toString().startsWith("file:")) {
             if (!from.isFile()) {
                 LogManager
-                        .error("File " + from.getAbsolutePath() + " cannot be copied to " + to.getAbsolutePath() + " as"
-                                + " it isn't a file");
+                    .error("File " + from.getAbsolutePath() + " cannot be copied to " + to.getAbsolutePath() + " as"
+                        + " it isn't a file");
             }
             if (!from.exists()) {
                 LogManager
-                        .error("File " + from.getAbsolutePath() + " cannot be copied to " + to.getAbsolutePath() + " as"
-                                + " it doesn't exist");
+                    .error("File " + from.getAbsolutePath() + " cannot be copied to " + to.getAbsolutePath() + " as"
+                        + " it doesn't exist");
                 return false;
             }
         } else {
@@ -375,7 +359,7 @@ public class Utils {
             return true;
         } else {
             LogManager.error("Couldn't move directory " + sourceLocation.getAbsolutePath() + " to "
-                    + targetLocation.getAbsolutePath());
+                + targetLocation.getAbsolutePath());
             return false;
         }
     }
@@ -504,8 +488,9 @@ public class Utils {
         }
 
         if (file.isDirectory() && !isSymlink(file)) {
-            if (file.listFiles() != null) {
-                for (File c : file.listFiles()) {
+            File[] files = file.listFiles();
+            if (files != null) {
+                for (File c : files) {
                     delete(c);
                 }
             }
@@ -513,7 +498,7 @@ public class Utils {
 
         if (!file.delete()) {
             LogManager.error(
-                    (file.isFile() ? "File" : "Folder") + " " + file.getAbsolutePath() + " couldn't be " + "deleted");
+                (file.isFile() ? "File" : "Folder") + " " + file.getAbsolutePath() + " couldn't be " + "deleted");
         }
     }
 
@@ -592,7 +577,7 @@ public class Utils {
     public static void zip(File in, File out) {
         try {
             URI base = in.toURI();
-            Deque<File> queue = new LinkedList<>();
+            Deque<File> queue = new ArrayDeque<>();
             queue.push(in);
             OutputStream stream = new FileOutputStream(out);
             Closeable res = stream;
@@ -673,7 +658,7 @@ public class Utils {
             key = generateKey();
             Cipher c = Cipher.getInstance("AES");
             c.init(Cipher.ENCRYPT_MODE, key);
-            byte[] encVal = c.doFinal(Data.getBytes());
+            byte[] encVal = c.doFinal(Data.getBytes(StandardCharsets.UTF_8));
             encryptedValue = Base64.encodeBytes(encVal);
         } catch (Exception e) {
             LogManager.logStackTrace(e);
@@ -696,7 +681,7 @@ public class Utils {
             c.init(Cipher.DECRYPT_MODE, key);
             byte[] decordedValue = Base64.decode(encryptedData);
             byte[] decValue = c.doFinal(decordedValue);
-            decryptedValue = new String(decValue);
+            decryptedValue = new String(decValue, StandardCharsets.UTF_8);
         } catch (InvalidKeyException | IllegalBlockSizeException | BadPaddingException e) {
             return Utils.decryptOld(encryptedData);
         } catch (Exception e) {
@@ -715,13 +700,14 @@ public class Utils {
         Key key;
         String decryptedValue = null;
         try {
-            key = new SecretKeySpec("NotARandomKeyYes".getBytes(), "AES");
+            key = new SecretKeySpec("NotARandomKeyYes".getBytes(StandardCharsets.UTF_8), "AES");
             Cipher c = Cipher.getInstance("AES");
             c.init(Cipher.DECRYPT_MODE, key);
             byte[] decordedValue = Base64.decode(encryptedData);
             byte[] decValue = c.doFinal(decordedValue);
-            decryptedValue = new String(decValue);
+            decryptedValue = new String(decValue, StandardCharsets.UTF_8);
         } catch (Exception ignored) {
+            // ignored
         }
         return decryptedValue;
     }
@@ -730,10 +716,9 @@ public class Utils {
      * Generate key.
      *
      * @return the key
-     * @throws Exception the exception
      */
     private static Key generateKey() throws Exception {
-        return new SecretKeySpec(getMACAdressHash().getBytes(), 0, 16, "AES");
+        return new SecretKeySpec(getMACAdressHash().getBytes(StandardCharsets.UTF_8), 0, 16, "AES");
     }
 
     /**
@@ -745,23 +730,24 @@ public class Utils {
      * @throws IOException Signals that an I/O exception has occurred.
      */
     public static void replaceText(InputStream fs, File destinationFile, String replaceThis, String withThis)
-            throws IOException {
+        throws IOException {
 
-        BufferedReader br = new BufferedReader(new InputStreamReader(fs));
+        BufferedReader br = new BufferedReader(new InputStreamReader(fs, StandardCharsets.UTF_8));
 
-        FileWriter writer1 = new FileWriter(destinationFile);
+        OutputStreamWriter fileWriter = new OutputStreamWriter(
+            new FileOutputStream(destinationFile), StandardCharsets.UTF_8);
 
         String line = br.readLine();
         while (line != null) {
             if (line.contains(replaceThis)) {
                 line = line.replace(replaceThis, withThis);
             }
-            writer1.write(line);
-            writer1.write(System.getProperty("line.separator"));
+            fileWriter.write(line);
+            fileWriter.write(System.lineSeparator());
             line = br.readLine();
         }
-        writer1.flush();
-        writer1.close();
+        fileWriter.flush();
+        fileWriter.close();
         br.close();
     }
 
@@ -772,134 +758,22 @@ public class Utils {
      * @throws IOException Signals that an I/O exception has occurred.
      */
     public static void writeResourceToFile(InputStream fs, File destinationFile)
-            throws IOException {
+        throws IOException {
 
-        BufferedReader br = new BufferedReader(new InputStreamReader(fs));
+        BufferedReader br = new BufferedReader(new InputStreamReader(fs, StandardCharsets.UTF_8));
 
-        FileWriter writer1 = new FileWriter(destinationFile);
+        OutputStreamWriter fileWriter = new OutputStreamWriter(
+            new FileOutputStream(destinationFile), StandardCharsets.UTF_8);
 
         String line = br.readLine();
         while (line != null) {
-            writer1.write(line);
-            writer1.write(System.getProperty("line.separator"));
+            fileWriter.write(line);
+            fileWriter.write(System.lineSeparator());
             line = br.readLine();
         }
-        writer1.flush();
-        writer1.close();
+        fileWriter.flush();
+        fileWriter.close();
         br.close();
-    }
-
-    /**
-     * Send post data.
-     *
-     * @param urll the urll
-     * @param text the text
-     * @param key  the key
-     * @return the string
-     * @throws IOException Signals that an I/O exception has occurred.
-     */
-    public static String sendPostData(String urll, String text, String key) throws IOException {
-        String write = URLEncoder.encode(key, "UTF-8") + "=" + URLEncoder.encode(text, "UTF-8");
-        StringBuilder response;
-        URL url = new URL(urll);
-        HttpURLConnection connection = (HttpURLConnection) url.openConnection();
-
-        connection.setRequestMethod("POST");
-        connection.setRequestProperty("User-Agent", Network.USER_AGENT);
-        connection.setRequestProperty("Cache-Control", "no-store,max-age=0,no-cache");
-        connection.setRequestProperty("Expires", "0");
-        connection.setRequestProperty("Pragma", "no-cache");
-
-        connection.setRequestProperty("Content-Length", "" + write.getBytes().length);
-
-        connection.setUseCaches(false);
-        connection.setDoInput(true);
-        connection.setDoOutput(true);
-
-        DataOutputStream writer = new DataOutputStream(connection.getOutputStream());
-        writer.write(write.getBytes());
-        writer.flush();
-        writer.close();
-
-        // Read the result
-
-        BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()));
-        response = new StringBuilder();
-        String line;
-        while ((line = reader.readLine()) != null) {
-            response.append(line);
-            response.append('\r');
-        }
-        reader.close();
-        return response.toString();
-    }
-
-    public static String sendAPICall(String path, Object data) throws IOException {
-        StringBuilder response;
-
-        byte[] contents = Gsons.DEFAULT.toJson(data).getBytes();
-
-        URL url = new URL(Constants.API_BASE_URL + path);
-        HttpURLConnection connection = (HttpURLConnection) url.openConnection();
-
-        connection.setRequestMethod("POST");
-        connection.setRequestProperty("User-Agent", Network.USER_AGENT);
-        connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
-        connection.setRequestProperty("Cache-Control", "no-store,max-age=0,no-cache");
-        connection.setRequestProperty("Expires", "0");
-        connection.setRequestProperty("Pragma", "no-cache");
-
-        connection.setRequestProperty("Content-Length", "" + contents.length);
-
-        connection.setUseCaches(false);
-        connection.setDoInput(true);
-        connection.setDoOutput(true);
-
-        DataOutputStream writer = new DataOutputStream(connection.getOutputStream());
-        writer.write(contents);
-        writer.flush();
-        writer.close();
-
-        // Read the result
-
-        BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()));
-        response = new StringBuilder();
-        String line;
-        while ((line = reader.readLine()) != null) {
-            response.append(line);
-            response.append('\r');
-        }
-        reader.close();
-        return response.toString();
-    }
-
-    public static String sendGetAPICall(String path) throws IOException {
-        StringBuilder response;
-
-        URL url = new URL(Constants.API_BASE_URL + path);
-        HttpsURLConnection connection = (HttpsURLConnection) url.openConnection();
-
-        connection.setRequestMethod("GET");
-        connection.setRequestProperty("User-Agent", Network.USER_AGENT);
-        connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
-        connection.setRequestProperty("Cache-Control", "no-store,max-age=0,no-cache");
-        connection.setRequestProperty("Expires", "0");
-        connection.setRequestProperty("Pragma", "no-cache");
-
-        connection.setUseCaches(false);
-        connection.setDoOutput(true);
-
-        // Read the result
-
-        BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()));
-        response = new StringBuilder();
-        String line;
-        while ((line = reader.readLine()) != null) {
-            response.append(line);
-            response.append('\r');
-        }
-        reader.close();
-        return response.toString();
     }
 
     /**
@@ -936,15 +810,15 @@ public class Utils {
 
     public static boolean combineJars(File mainJar, File jarToAdd, File outputJar) {
         try (FileInputStream is = new FileInputStream(mainJar);
-                JarInputStream jis = new JarInputStream(is);
-                JarFile jarFile = new JarFile(mainJar);
+            JarInputStream jis = new JarInputStream(is);
+            JarFile jarFile = new JarFile(mainJar);
 
-                FileInputStream is2 = new FileInputStream(jarToAdd);
-                JarInputStream jis2 = new JarInputStream(is2);
-                JarFile jarFile2 = new JarFile(jarToAdd);
+            FileInputStream is2 = new FileInputStream(jarToAdd);
+            JarInputStream jis2 = new JarInputStream(is2);
+            JarFile jarFile2 = new JarFile(jarToAdd);
 
-                FileOutputStream fos = new FileOutputStream(outputJar);
-                JarOutputStream jos = new JarOutputStream(fos)) {
+            FileOutputStream fos = new FileOutputStream(outputJar);
+            JarOutputStream jos = new JarOutputStream(fos)) {
             Set<String> entriesAdded = new HashSet<>();
             JarEntry entry;
             while ((entry = jis2.getNextJarEntry()) != null) {
@@ -1010,10 +884,10 @@ public class Utils {
      */
     public static boolean stripMetaInf(File minecraftJar, File outputJar) {
         try (FileInputStream is = new FileInputStream(minecraftJar);
-                JarInputStream jis = new JarInputStream(is);
-                FileOutputStream fos = new FileOutputStream(outputJar);
-                JarOutputStream jos = new JarOutputStream(fos);
-                JarFile jarFile = new JarFile(minecraftJar)) {
+            JarInputStream jis = new JarInputStream(is);
+            FileOutputStream fos = new FileOutputStream(outputJar);
+            JarOutputStream jos = new JarOutputStream(fos);
+            JarFile jarFile = new JarFile(minecraftJar)) {
             JarEntry entry;
             while ((entry = jis.getNextJarEntry()) != null) {
                 if (entry.getName().contains("META-INF")) {
@@ -1041,7 +915,6 @@ public class Utils {
 
             return false;
         }
-
         return true;
     }
 
@@ -1084,13 +957,13 @@ public class Utils {
         String contents = null;
         BufferedReader br = null;
         try {
-            br = new BufferedReader(new FileReader(file));
+            br = Files.newBufferedReader(file.toPath(), StandardCharsets.UTF_8);
             StringBuilder sb = new StringBuilder();
             String line = br.readLine();
 
             while (line != null) {
                 sb.append(line);
-                sb.append(System.getProperty("line.separator"));
+                sb.append(System.lineSeparator());
                 line = br.readLine();
             }
             contents = sb.toString();
@@ -1109,8 +982,7 @@ public class Utils {
     }
 
     /**
-     * This splits up a string into a multi lined string by adding a separator at
-     * every space after a given count.
+     * This splits up a string into a multi lined string by adding a separator at every space after a given count.
      *
      * @param string        the string to split up
      * @param maxLineLength the number of characters minimum to have per line
@@ -1120,7 +992,7 @@ public class Utils {
     public static String splitMultilinedString(String string, int maxLineLength, String lineSeparator) {
         char[] chars = string.toCharArray();
         StringBuilder sb = new StringBuilder();
-        char spaceChar = " ".charAt(0);
+        char spaceChar = ' ';
         int count = 0;
         for (char character : chars) {
             if (count >= maxLineLength && character == spaceChar) {
@@ -1177,8 +1049,7 @@ public class Utils {
     }
 
     /**
-     * Counts the numbers of non transparent pixels in a given
-     * {@link BufferedImage}.
+     * Counts the numbers of non transparent pixels in a given {@link BufferedImage}.
      *
      * @param image The image to count the number of non transparent pixels in
      * @return The number of non transparent pixels
@@ -1208,7 +1079,7 @@ public class Utils {
             }
 
             BufferedReader reader;
-            reader = new BufferedReader(new InputStreamReader(traceRoute.getInputStream()));
+            reader = new BufferedReader(new InputStreamReader(traceRoute.getInputStream(), StandardCharsets.UTF_8));
 
             response = new StringBuilder();
             String line;
@@ -1240,7 +1111,7 @@ public class Utils {
             }
 
             BufferedReader reader;
-            reader = new BufferedReader(new InputStreamReader(traceRoute.getInputStream()));
+            reader = new BufferedReader(new InputStreamReader(traceRoute.getInputStream(), StandardCharsets.UTF_8));
 
             response = new StringBuilder();
             String line;
@@ -1409,12 +1280,9 @@ public class Utils {
     }
 
     public static void unXZFile(File input, File output) throws IOException {
-        FileInputStream fis;
-        FileOutputStream fos;
-        XZInputStream xzis;
-        fis = new FileInputStream(input);
-        xzis = new XZInputStream(fis);
-        fos = new FileOutputStream(output);
+        FileInputStream fis = new FileInputStream(input);
+        FileOutputStream fos = new FileOutputStream(output);
+        XZInputStream xzis = new XZInputStream(fis);
 
         final byte[] buffer = new byte[8192];
         int n;
@@ -1422,15 +1290,9 @@ public class Utils {
             fos.write(buffer, 0, n);
         }
 
-        if (fis != null) {
-            fis.close();
-        }
-        if (fos != null) {
-            fos.close();
-        }
-        if (xzis != null) {
-            xzis.close();
-        }
+        fis.close();
+        fos.close();
+        xzis.close();
     }
 
     private static String getMACAdressHash() {
@@ -1498,13 +1360,70 @@ public class Utils {
         }
 
         String path = parts[0].replace(".", "/") + "/" + name + "/" + version + "/" + name + "-" + version + classifier
-                + "." + extension;
+            + "." + extension;
 
         return path;
     }
 
+    public static Pair<String, String> convertMavenIdentifierToNameAndVersion(String identifier) {
+        String[] parts = identifier.split(":", 3);
+        if (parts.length < 3) {
+            // old ATLauncher libraries don't use maven identifiers, so just return the
+            // identifier
+            return new Pair<>(identifier, "0");
+        }
+        String name = parts[1];
+        String version = parts[2];
+        String classifier = "";
+
+        if (version.indexOf('@') != -1) {
+            version = version.substring(0, version.indexOf('@'));
+        }
+
+        if (version.indexOf(':') != -1) {
+            classifier = ":" + version.substring(version.indexOf(':') + 1);
+            version = version.substring(0, version.indexOf(':'));
+        }
+
+        return new Pair<>(parts[0] + ":" + name + classifier, version);
+    }
+
     public static File convertMavenIdentifierToFile(String identifier, File base) {
         return new File(base, convertMavenIdentifierToPath(identifier).replace("/", File.separatorChar + ""));
+    }
+
+    public static int compareVersions(String version1, String version2) {
+        int result = 0;
+
+        String[] parts1 = version1.split("\\.");
+        String[] parts2 = version2.split("\\.");
+
+        int maxLengthOfVersionSplits = Math.max(parts1.length, parts2.length);
+        for (int i = 0; i < maxLengthOfVersionSplits; i++) {
+            if (parts1.length <= i) {
+                return -1;
+            }
+            if (parts2.length <= i) {
+                return 1;
+            }
+
+            try {
+                String part1Sanatised = parts1[i].split("[^0-9]", 2)[0];
+                String part2Sanatised = parts2[i].split("[^0-9]", 2)[0];
+                Integer v1 = i < parts1.length ? Integer.valueOf(part1Sanatised) : 0;
+                Integer v2 = i < parts2.length ? Integer.valueOf(part2Sanatised) : 0;
+                int compare = v1.compareTo(v2);
+                if (compare != 0) {
+                    result = compare;
+                    break;
+                }
+            } catch (NumberFormatException | ArrayIndexOutOfBoundsException e) {
+                // if any exception is thrown, just show that the versions are equal
+                return 0;
+            }
+        }
+
+        return result;
     }
 
     public static boolean matchVersion(String version, String matches, boolean lessThan, boolean equal) {
@@ -1520,16 +1439,12 @@ public class Utils {
         }
 
         if (lessThan && versionParts[0].equals(matchedParts[0])
-                && Integer.parseInt(versionParts[1]) < Integer.parseInt(matchedParts[1])) {
+            && Integer.parseInt(versionParts[1].split("-")[0]) < Integer.parseInt(matchedParts[1].split("-")[0])) {
             return true;
         }
 
-        if (!lessThan && versionParts[0].equals(matchedParts[0])
-                && Integer.parseInt(versionParts[1]) > Integer.parseInt(matchedParts[1])) {
-            return true;
-        }
-
-        return false;
+        return !lessThan && versionParts[0].equals(matchedParts[0])
+            && Integer.parseInt(versionParts[1].split("-")[0]) > Integer.parseInt(matchedParts[1].split("-")[0]);
     }
 
     public static boolean matchWholeVersion(String version, String matches, boolean equal) {
@@ -1537,15 +1452,15 @@ public class Utils {
         String[] matchedParts = matches.split("\\.", 3);
 
         if (equal && versionParts[0].equals(matchedParts[0]) && versionParts[1].equals(matchedParts[1])
-                && versionParts[2].equals(matchedParts[2])) {
+            && versionParts[2].equals(matchedParts[2])) {
             return true;
         }
 
         return Integer.parseInt(versionParts[0]) > Integer.parseInt(matchedParts[0])
-                || (versionParts[0].equals(matchedParts[0])
-                        && Integer.parseInt(versionParts[1]) > Integer.parseInt(matchedParts[1]))
-                || (versionParts[0].equals(matchedParts[0]) && versionParts[1].equals(matchedParts[1])
-                        && Integer.parseInt(versionParts[2]) > Integer.parseInt(matchedParts[2]));
+            || (versionParts[0].equals(matchedParts[0])
+            && Integer.parseInt(versionParts[1]) > Integer.parseInt(matchedParts[1]))
+            || (versionParts[0].equals(matchedParts[0]) && versionParts[1].equals(matchedParts[1])
+            && Integer.parseInt(versionParts[2]) > Integer.parseInt(matchedParts[2]));
     }
 
     public static MCMod getMCModForFile(File file) {
@@ -1553,13 +1468,13 @@ public class Utils {
             java.lang.reflect.Type type = new TypeToken<List<MCMod>>() {
             }.getType();
 
-            List<MCMod> mods = Gsons.MINECRAFT.fromJson(ArchiveUtils.getFile(file.toPath(), "mcmod.info"), type);
+            List<MCMod> mods = Gsons.DEFAULT.fromJson(ArchiveUtils.getFile(file.toPath(), "mcmod.info"), type);
 
-            if (mods.size() != 0 && mods.get(0) != null) {
+            if (!mods.isEmpty() && mods.get(0) != null) {
                 return mods.get(0);
             }
         } catch (Exception ignored) {
-
+            // ignored
         }
 
         return null;
@@ -1567,14 +1482,14 @@ public class Utils {
 
     public static FabricMod getFabricModForFile(File file) {
         try {
-            FabricMod mod = Gsons.MINECRAFT.fromJson(ArchiveUtils.getFile(file.toPath(), "fabric.mod.json"),
-                    FabricMod.class);
+            FabricMod mod = Gsons.DEFAULT.fromJson(ArchiveUtils.getFile(file.toPath(), "fabric.mod.json"),
+                FabricMod.class);
 
             if (mod != null) {
                 return mod;
             }
         } catch (Exception ignored2) {
-
+            // ignored
         }
 
         return null;
@@ -1583,10 +1498,10 @@ public class Utils {
     public static boolean executableInPath(String executableName) {
         try {
             return java.util.stream.Stream
-                    .of(System.getenv("PATH").split(java.util.regex.Pattern.quote(File.pathSeparator)))
-                    .map(path -> path.replace("\"", "")).map(Paths::get)
-                    .anyMatch(path -> Files.exists(path.resolve(executableName))
-                            && Files.isExecutable(path.resolve(executableName)));
+                .of(System.getenv("PATH").split(java.util.regex.Pattern.quote(File.pathSeparator)))
+                .map(path -> path.replace("\"", "")).map(Paths::get)
+                .anyMatch(path -> Files.exists(path.resolve(executableName))
+                    && Files.isExecutable(path.resolve(executableName)));
         } catch (Exception e) {
             return false;
         }
@@ -1598,7 +1513,8 @@ public class Utils {
             processBuilder.redirectErrorStream(true);
 
             Process process = processBuilder.start();
-            BufferedReader br = new BufferedReader(new InputStreamReader(process.getInputStream()));
+            BufferedReader br = new BufferedReader(
+                new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8));
             StringBuilder sb = new StringBuilder();
 
             try {
@@ -1627,7 +1543,8 @@ public class Utils {
             processBuilder.redirectErrorStream(true);
 
             Process process = processBuilder.start();
-            BufferedReader br = new BufferedReader(new InputStreamReader(process.getInputStream()));
+            BufferedReader br = new BufferedReader(
+                new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8));
             StringBuilder sb = new StringBuilder();
 
             try {
@@ -1666,8 +1583,34 @@ public class Utils {
                 return true;
             }
         } catch (Exception ignored) {
+            // ignored
         }
 
         return false;
+    }
+
+    public static @Nullable Integer getSafeIntegerFromString(@Nullable String string) {
+        Integer categoryIdParam = null;
+        if (string != null) {
+            try {
+                categoryIdParam = Integer.valueOf(string);
+            } catch (NumberFormatException e) {
+                categoryIdParam = null;
+            }
+        }
+        return categoryIdParam;
+    }
+
+    public static String capitalize(String name) {
+        return Arrays
+            .stream(name.split("\\s+"))
+            .map(s -> s.isEmpty()
+                ? s
+                : s.substring(0, 1).toUpperCase(Locale.ENGLISH) + s.substring(1).toLowerCase(Locale.ENGLISH))
+            .collect(Collectors.joining(" "));
+    }
+
+    public static String ensureTrailingSlash(String path) {
+        return path.endsWith("/") ? path : path + "/";
     }
 }

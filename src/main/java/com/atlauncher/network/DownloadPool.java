@@ -17,8 +17,9 @@
  */
 package com.atlauncher.network;
 
+import java.io.IOException;
 import java.nio.file.Files;
-import java.util.LinkedList;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -28,8 +29,7 @@ import com.atlauncher.App;
 import com.atlauncher.managers.LogManager;
 import com.atlauncher.utils.FileUtils;
 
-@SuppressWarnings("serial")
-public final class DownloadPool extends LinkedList<Download> {
+public final class DownloadPool extends ArrayList<Download> {
     private final boolean wait;
 
     public DownloadPool(boolean wait) {
@@ -124,7 +124,7 @@ public final class DownloadPool extends LinkedList<Download> {
                 } else {
                     this.dl.copy();
                 }
-            } catch (Exception e) {
+            } catch (IOException e) {
                 LogManager.logStackTrace("Error trying to download " + this.dl.to.getFileName(), e);
             }
         }

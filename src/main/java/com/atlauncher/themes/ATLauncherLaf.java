@@ -40,7 +40,6 @@ import com.formdev.flatlaf.FlatIntelliJLaf;
 import com.formdev.flatlaf.FlatLaf;
 import com.formdev.flatlaf.FlatLightLaf;
 
-@SuppressWarnings("serial")
 public class ATLauncherLaf extends FlatLaf {
     public static ATLauncherLaf instance;
 
@@ -88,6 +87,14 @@ public class ATLauncherLaf extends FlatLaf {
             return Resources.makeFont("sansserif").deriveFont(Font.BOLD, 12f);
         } else {
             return Resources.makeFont(defaultFontName).deriveFont(Font.BOLD, 12f);
+        }
+    }
+
+    public Font getTitleFont() {
+        if (useBaseFont()) {
+            return Resources.makeFont("sansserif").deriveFont(Font.BOLD, 18f);
+        } else {
+            return Resources.makeFont(defaultFontName).deriveFont(Font.BOLD, 18f);
         }
     }
 
@@ -200,6 +207,10 @@ public class ATLauncherLaf extends FlatLaf {
     }
 
     private void updateFontInComponentTree(Component c) {
+        if (c == null) {
+            return;
+        }
+
         if (c instanceof JComponent) {
             JComponent jc = (JComponent) c;
             JPopupMenu jpm = jc.getComponentPopupMenu();

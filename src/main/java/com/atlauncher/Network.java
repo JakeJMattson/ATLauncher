@@ -17,17 +17,16 @@
  */
 package com.atlauncher;
 
+import java.io.IOException;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
-import java.util.Arrays;
-import java.util.List;
+import java.util.Collections;
+import java.util.Iterator;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import javax.net.ssl.HostnameVerifier;
 import javax.net.ssl.SSLContext;
-import javax.net.ssl.SSLSession;
 import javax.net.ssl.SSLSocketFactory;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
@@ -50,23 +49,11 @@ import okhttp3.Response;
 import okhttp3.tls.HandshakeCertificates;
 
 public final class Network {
-    public static Cache CACHE = new Cache(FileSystem.CACHE.toFile(), 100 * 1024 * 1024); // 100MB cache
+    public static final Cache CACHE = new Cache(FileSystem.HTTP_CACHE.toFile(), 100 * 1024 * 1024); // 100MB cache
 
-    private static List<Protocol> protocols = App.settings.dontUseHttp2 ? Arrays.asList(Protocol.HTTP_1_1)
-            : Arrays.asList(Protocol.HTTP_2, Protocol.HTTP_1_1);
-
-    public static OkHttpClient CLIENT = new OkHttpClient.Builder().protocols(protocols)
-            .addNetworkInterceptor(new UserAgentInterceptor()).addInterceptor(new DebugLoggingInterceptor())
-            .addNetworkInterceptor(new ErrorReportingInterceptor())
-            .connectTimeout(App.settings.connectionTimeout, TimeUnit.SECONDS)
-            .readTimeout(App.settings.connectionTimeout, TimeUnit.SECONDS)
-            .writeTimeout(App.settings.connectionTimeout, TimeUnit.SECONDS).build();
-
-    public static OkHttpClient GRAPHQL_CLIENT = CLIENT.newBuilder()
-            .addInterceptor(new ApolloClientAwarenessInterceptor("Launcher", Constants.VERSION.toStringForLogging()))
-            .build();
-
-    public static OkHttpClient CACHED_CLIENT = CLIENT.newBuilder().cache(CACHE).build();
+    public static OkHttpClient CLIENT;
+    public static OkHttpClient GRAPHQL_CLIENT;
+    public static OkHttpClient CACHED_CLIENT;
 
     public static final String ANALYTICS_USER_AGENT = String.format(
             "Mozilla/5.0 (%s) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/88.0.4324.104 Safari/537.36 %s/%s Java/%s",
@@ -77,8 +64,33 @@ public final class Network {
             "%s/%s (+%s)", Constants.LAUNCHER_NAME, Constants.VERSION.toStringForUserAgent(),
             Constants.LAUNCHER_WEBSITE);
 
+    public static final String API_USER_AGENT = String.format(
+            "%s/%s [%s/%s] (+%s)", Constants.LAUNCHER_NAME, Constants.VERSION.toStringForLogging(),
+            Constants.VERSION.getSha1Revision(),
+            OS.getInstallMethod().toString(),
+            Constants.LAUNCHER_WEBSITE);
+
     static {
-        Logger.getLogger(OkHttpClient.class.getName()).setLevel(Level.FINE);
+        Logger.getLogger(OkHttpClient.class.getName()).setLevel(Level.FINEST);
+
+        OkHttpClient baseClient = new OkHttpClient.Builder()
+                .protocols(Collections.singletonList(Protocol.HTTP_1_1))
+                .addNetworkInterceptor(new UserAgentInterceptor())
+                .addInterceptor(new DebugLoggingInterceptor())
+                .addNetworkInterceptor(new ErrorReportingInterceptor())
+                .connectTimeout(App.settings.connectionTimeout, TimeUnit.SECONDS)
+                .readTimeout(App.settings.connectionTimeout, TimeUnit.SECONDS)
+                .writeTimeout(App.settings.connectionTimeout, TimeUnit.SECONDS)
+                .build();
+
+        CLIENT = baseClient;
+
+        GRAPHQL_CLIENT = baseClient.newBuilder()
+                .addInterceptor(
+                        new ApolloClientAwarenessInterceptor("Launcher", Constants.VERSION.toStringForLogging()))
+                .build();
+
+        CACHED_CLIENT = baseClient.newBuilder().cache(CACHE).build();
     }
 
     public static void setConnectionTimeouts() {
@@ -93,15 +105,6 @@ public final class Network {
         CACHED_CLIENT = CACHED_CLIENT.newBuilder().connectTimeout(App.settings.connectionTimeout, TimeUnit.SECONDS)
                 .readTimeout(App.settings.connectionTimeout, TimeUnit.SECONDS)
                 .writeTimeout(App.settings.connectionTimeout, TimeUnit.SECONDS).build();
-    }
-
-    public static void setProtocols() {
-        protocols = App.settings.dontUseHttp2 ? Arrays.asList(Protocol.HTTP_1_1)
-                : Arrays.asList(Protocol.HTTP_2, Protocol.HTTP_1_1);
-
-        CLIENT = CLIENT.newBuilder().protocols(protocols).build();
-        GRAPHQL_CLIENT = GRAPHQL_CLIENT.newBuilder().protocols(protocols).build();
-        CACHED_CLIENT = CACHED_CLIENT.newBuilder().protocols(protocols).build();
     }
 
     public static OkHttpClient createProgressClient(final NetworkProgressable progressable) {
@@ -138,13 +141,11 @@ public final class Network {
 
                 @Override
                 public void checkClientTrusted(java.security.cert.X509Certificate[] chain, String authType)
-                        throws CertificateException {
-                }
+                        throws CertificateException {}
 
                 @Override
                 public void checkServerTrusted(java.security.cert.X509Certificate[] chain, String authType)
-                        throws CertificateException {
-                }
+                        throws CertificateException {}
 
                 @Override
                 public java.security.cert.X509Certificate[] getAcceptedIssuers() {
@@ -158,32 +159,30 @@ public final class Network {
             final SSLSocketFactory sslSocketFactory = sslContext.getSocketFactory();
 
             CLIENT = CLIENT.newBuilder().sslSocketFactory(sslSocketFactory, (X509TrustManager) trustAllCerts[0])
-                    .hostnameVerifier(new HostnameVerifier() {
-                        @Override
-                        public boolean verify(String hostname, SSLSession session) {
-                            return true;
-                        }
-                    }).build();
+                    .hostnameVerifier((hostname, session) -> true).build();
 
             GRAPHQL_CLIENT = GRAPHQL_CLIENT.newBuilder()
                     .sslSocketFactory(sslSocketFactory, (X509TrustManager) trustAllCerts[0])
-                    .hostnameVerifier(new HostnameVerifier() {
-                        @Override
-                        public boolean verify(String hostname, SSLSession session) {
-                            return true;
-                        }
-                    }).build();
+                    .hostnameVerifier((hostname, session) -> true).build();
 
             CACHED_CLIENT = CACHED_CLIENT.newBuilder()
                     .sslSocketFactory(sslSocketFactory, (X509TrustManager) trustAllCerts[0])
-                    .hostnameVerifier(new HostnameVerifier() {
-                        @Override
-                        public boolean verify(String hostname, SSLSession session) {
-                            return true;
-                        }
-                    }).build();
+                    .hostnameVerifier((hostname, session) -> true).build();
         } catch (Exception e) {
             throw new RuntimeException(e);
+        }
+    }
+
+    public static void removeUrlFromCache(String url) {
+        try {
+            Iterator<String> urlIterator = Network.CACHE.urls();
+            while (urlIterator.hasNext()) {
+                if (urlIterator.next().equals(url)) {
+                    urlIterator.remove();
+                }
+            }
+        } catch (IOException e) {
+            // Ignore
         }
     }
 }

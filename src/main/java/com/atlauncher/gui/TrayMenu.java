@@ -30,15 +30,14 @@ import org.mini2Dx.gettext.GetText;
 import com.atlauncher.App;
 import com.atlauncher.FileSystem;
 import com.atlauncher.builders.HTMLBuilder;
-import com.atlauncher.evnt.listener.ConsoleCloseListener;
-import com.atlauncher.evnt.listener.ConsoleOpenListener;
-import com.atlauncher.evnt.manager.ConsoleCloseManager;
-import com.atlauncher.evnt.manager.ConsoleOpenManager;
+import com.atlauncher.data.ConsoleState;
+import com.atlauncher.evnt.manager.ConsoleStateManager;
 import com.atlauncher.managers.DialogManager;
+import com.atlauncher.network.Analytics;
+import com.atlauncher.network.analytics.AnalyticsEvent;
 import com.atlauncher.utils.OS;
 
-@SuppressWarnings("serial")
-public final class TrayMenu extends JPopupMenu implements ConsoleCloseListener, ConsoleOpenListener {
+public final class TrayMenu extends JPopupMenu {
 
     private final JMenuItem killMinecraftButton = new JMenuItem(GetText.tr("Kill Minecraft"));
     private final JMenuItem toggleConsoleButton = new JMenuItem(GetText.tr("Toggle Console"));
@@ -59,8 +58,14 @@ public final class TrayMenu extends JPopupMenu implements ConsoleCloseListener, 
         this.addSeparator();
         this.add(this.quitButton);
 
-        ConsoleCloseManager.addListener(this);
-        ConsoleOpenManager.addListener(this);
+        ConsoleStateManager.getObservable().subscribe(newState-> {
+                if (newState == ConsoleState.OPEN) {
+                    onConsoleOpen();
+                } else {
+                    onConsoleClose();
+                }
+            }
+        );
 
         this.addActionListeners();
     }
@@ -75,12 +80,17 @@ public final class TrayMenu extends JPopupMenu implements ConsoleCloseListener, 
                         .setType(DialogManager.ERROR).show();
 
                 if (ret == DialogManager.YES_OPTION) {
+                    Analytics.trackEvent(AnalyticsEvent.simpleEvent("tray_kill_minecraft"));
                     App.launcher.killMinecraft();
                 }
             }
         }));
-        this.toggleConsoleButton.addActionListener(e -> App.console.setVisible(!App.console.isVisible()));
+        this.toggleConsoleButton.addActionListener(e -> {
+            Analytics.trackEvent(AnalyticsEvent.simpleEvent("tray_toggle_console"));
+            App.console.setVisible(!App.console.isVisible());
+        });
         this.killOpenDialogsButton.addActionListener(e -> {
+            Analytics.trackEvent(AnalyticsEvent.simpleEvent("tray_kill_open_dialogs"));
             for (Frame frame : Frame.getFrames()) {
                 for (Window window : frame.getOwnedWindows()) {
                     if (window.getName().startsWith("dialog")) {
@@ -91,16 +101,20 @@ public final class TrayMenu extends JPopupMenu implements ConsoleCloseListener, 
             }
         });
         this.openLauncherFolderButton.addActionListener(e -> {
+            Analytics.trackEvent(AnalyticsEvent.simpleEvent("tray_open_launcher_folder"));
             OS.openFileExplorer(FileSystem.BASE_DIR);
         });
         this.quitButton.addActionListener(e -> {
+            Analytics.trackEvent(AnalyticsEvent.simpleEvent("tray_quit"));
             try {
                 if (SystemTray.isSupported()) {
                     SystemTray.getSystemTray().remove(App.trayIcon);
                 }
             } catch (Exception ignored) {
+                // ignored
             }
 
+            Analytics.endSession();
             System.exit(0);
         });
     }
@@ -109,13 +123,11 @@ public final class TrayMenu extends JPopupMenu implements ConsoleCloseListener, 
         this.killMinecraftButton.setVisible(launched);
     }
 
-    @Override
-    public void onConsoleClose() {
+    private void onConsoleClose() {
         this.toggleConsoleButton.setText(GetText.tr("Show Console"));
     }
 
-    @Override
-    public void onConsoleOpen() {
+    private void onConsoleOpen() {
         this.toggleConsoleButton.setText(GetText.tr("Hide Console"));
     }
 }

@@ -21,26 +21,31 @@ import java.awt.Dimension;
 import java.awt.Point;
 import java.awt.Rectangle;
 import java.io.File;
-import java.io.FileWriter;
 import java.io.IOException;
+import java.io.OutputStreamWriter;
 import java.net.InetSocketAddress;
 import java.net.Proxy;
-import java.net.Proxy.Type;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 import java.util.UUID;
 
 import com.atlauncher.FileSystem;
 import com.atlauncher.Gsons;
 import com.atlauncher.constants.Constants;
-import com.atlauncher.managers.ConfigManager;
 import com.atlauncher.managers.LogManager;
 import com.atlauncher.utils.OS;
 import com.atlauncher.utils.Timestamper;
 import com.atlauncher.utils.Utils;
 import com.atlauncher.utils.sort.InstanceSortingStrategies;
+import com.google.gson.annotations.SerializedName;
 
 public class Settings {
     // Launcher things
@@ -52,6 +57,8 @@ public class Settings {
     public boolean ignoreProgramFilesWarning = false;
     public boolean ignoreJavaOptionsWarning = false;
     public boolean seenCurseForgeProjectDistributionDialog = false;
+    public int seenBundledJrePromptVersion = 0;
+    public int seenOutdatedJavaPromptVersion = 0;
 
     // Window settings
     public boolean rememberWindowSizePosition = false;
@@ -72,7 +79,6 @@ public class Settings {
     public boolean keepLauncherOpen = true;
     public boolean enableConsole = true;
     public boolean enableTrayMenu = true;
-    public boolean enableDiscordIntegration = !OS.isArm();
     public boolean enableFeralGamemode = OS.isLinux() && Utils.executableInPath("gamemoderun");
     private boolean disableAddModRestrictions = false;
     public boolean disableCustomFonts = false;
@@ -82,21 +88,24 @@ public class Settings {
 
     // Mods
     public ModPlatform defaultModPlatform = ModPlatform.CURSEFORGE;
+    public InstanceExportFormat defaultExportFormat = InstanceExportFormat.CURSEFORGE;
     public AddModRestriction addModRestriction = AddModRestriction.STRICT;
     public boolean enableAddedModsByDefault = true;
+    public boolean showFabricModsWhenSinytraInstalled = true;
+    public boolean allowCurseForgeAlphaBetaFiles = false;
     public boolean dontCheckModsOnCurseForge = false;
     public boolean dontCheckModsOnModrinth = false;
-    public InstanceExportFormat defaultExportFormat = InstanceExportFormat.CURSEFORGE;
+    public boolean scanModsOnLaunch = true;
 
     // Java/Minecraft
-    public int initialMemory = 512;
     public int maximumMemory = 4096;
     public int metaspace = (OS.is64Bit() ? 256 : 128);
     public int windowWidth = 854;
     public int windowHeight = 480;
     public String javaPath;
     public String javaParameters = Constants.DEFAULT_JAVA_PARAMETERS;
-    public String baseJavaInstallFolder = null;
+    @SerializedName(value = "javaInstallLocation", alternate = { "baseJavaInstallFolder" })
+    public String javaInstallLocation = null;
     public boolean maximiseMinecraft = false;
     public boolean ignoreJavaOnInstanceLaunch = false;
     public boolean useJavaProvidedByMinecraft = true;
@@ -104,10 +113,13 @@ public class Settings {
     public boolean useSystemGlfw = false;
     public boolean useSystemOpenAl = false;
 
+    // Environment Variables
+    public Map<String, String> environmentVariables = new HashMap<>();
+
     // Network
     public int concurrentConnections = 8;
     public int connectionTimeout = 60;
-    public boolean dontUseHttp2 = false;
+    public String modrinthApiKey = null;
     public boolean enableProxy = false;
     public String proxyHost = "";
     public int proxyPort = 8080;
@@ -115,12 +127,12 @@ public class Settings {
     public transient Proxy proxy;
 
     // Logging
-    public String forgeLoggingLevel = "INFO";
     public boolean enableLogs = true;
     public boolean enableAnalytics = true;
     public String analyticsClientId = UUID.randomUUID().toString();
 
     // Backups
+    public String backupsPath = null;
     public boolean enableAutomaticBackupAfterLaunch = false;
     public BackupMode backupMode = BackupMode.NORMAL;
 
@@ -162,11 +174,6 @@ public class Settings {
             enableTrayMenu = Boolean.parseBoolean(importedEnableTrayMenu);
         }
 
-        String importedEnableDiscordIntegration = properties.getProperty("enablediscordintegration");
-        if (importedEnableDiscordIntegration != null) {
-            enableDiscordIntegration = Boolean.parseBoolean(importedEnableDiscordIntegration);
-        }
-
         String importedEnableFeralGamemode = properties.getProperty("enableferalgamemode");
         if (importedEnableFeralGamemode != null) {
             enableFeralGamemode = Boolean.parseBoolean(importedEnableFeralGamemode);
@@ -193,16 +200,6 @@ public class Settings {
         String importedFirstTimeRun = properties.getProperty("firsttimerun");
         if (importedFirstTimeRun != null) {
             firstTimeRun = Boolean.parseBoolean(importedFirstTimeRun);
-        }
-
-        String importedForgeLoggingLevel = properties.getProperty("forgelogginglevel");
-        if (importedForgeLoggingLevel != null) {
-            forgeLoggingLevel = importedForgeLoggingLevel;
-        }
-
-        String importedInitialMemory = properties.getProperty("initialmemory");
-        if (importedInitialMemory != null) {
-            initialMemory = Integer.parseInt(importedInitialMemory);
         }
 
         String importedMaximumMemory = properties.getProperty("ram");
@@ -297,6 +294,8 @@ public class Settings {
         validateDisableAddModRestrictions();
         validateDefaultModPlatform();
 
+        validateCustomDownloadsPath();
+        validateJavaInstallLocation();
         validateJavaPath();
 
         validateMemory();
@@ -311,13 +310,15 @@ public class Settings {
         validateDateFormat();
 
         validateInstanceTitleFormat();
+
+        validateBackupsPath();
     }
 
     private void validateAnalyticsClientId() {
         // people are sharing configs around with a static id or with null which means
         // it's hard to see actual usage, so randomise if enabled
         if (enableAnalytics && (analyticsClientId == null
-                || analyticsClientId.equalsIgnoreCase("30662333-d88f-4e21-8d77-95739af9bf78"))) {
+            || analyticsClientId.equalsIgnoreCase("30662333-d88f-4e21-8d77-95739af9bf78"))) {
             analyticsClientId = UUID.randomUUID().toString();
             save();
         }
@@ -341,12 +342,12 @@ public class Settings {
         }
 
         if (launcherPosition != null
-                && !OS.getScreenVirtualBounds().contains(new Rectangle(launcherPosition, launcherSize))) {
+            && !OS.getScreenVirtualBounds().contains(new Rectangle(launcherPosition, launcherSize))) {
             launcherPosition = null;
         }
 
         if (consolePosition != null
-                && !OS.getScreenVirtualBounds().contains(new Rectangle(consolePosition, consoleSize))) {
+            && !OS.getScreenVirtualBounds().contains(new Rectangle(consolePosition, consoleSize))) {
             consolePosition = null;
         }
     }
@@ -371,8 +372,42 @@ public class Settings {
 
     private void validateDefaultModPlatform() {
         if (defaultModPlatform == null
-                || !(defaultModPlatform == ModPlatform.CURSEFORGE || defaultModPlatform == ModPlatform.MODRINTH)) {
+            || !(defaultModPlatform == ModPlatform.CURSEFORGE || defaultModPlatform == ModPlatform.MODRINTH)) {
             defaultModPlatform = ModPlatform.CURSEFORGE;
+        }
+    }
+
+    public void validateCustomDownloadsPath() {
+        if (customDownloadsPath != null) {
+            try {
+                Path customDownloadsPathPath = Paths.get(customDownloadsPath);
+
+                // set to null if path is not a directory that exists
+                if (!Files.exists(customDownloadsPathPath) || !Files.isDirectory(customDownloadsPathPath)) {
+                    LogManager.warn("Custom Downloads Path Is Incorrect! Deleting setting!");
+                    customDownloadsPath = null;
+                }
+            } catch (Exception e) {
+                LogManager.warn("Custom Downloads Path Is Incorrect! Deleting setting!");
+                customDownloadsPath = null;
+            }
+        }
+    }
+
+    public void validateJavaInstallLocation() {
+        if (javaInstallLocation != null) {
+            try {
+                Path javaInstallLocationPath = Paths.get(javaInstallLocation);
+
+                // set to null if path is not a directory that exists
+                if (!Files.exists(javaInstallLocationPath) || !Files.isDirectory(javaInstallLocationPath)) {
+                    LogManager.warn("Java Install Location Is Incorrect! Deleting setting!");
+                    javaInstallLocation = null;
+                }
+            } catch (Exception e) {
+                LogManager.warn("Java Install Location Is Incorrect! Deleting setting!");
+                javaInstallLocation = null;
+            }
         }
     }
 
@@ -392,23 +427,9 @@ public class Settings {
         boolean needToSave = false;
         int systemMemory = OS.getMaximumRam();
 
-        if (ConfigManager.getConfigItem("removeInitialMemoryOption", false) == false) {
-            if (systemMemory != 0 && initialMemory > systemMemory) {
-                LogManager.warn("Tried to allocate " + initialMemory + "MB for initial memory but only " + systemMemory
-                        + "MB is available to use!");
-                initialMemory = 512;
-                needToSave = true;
-            } else if (initialMemory > maximumMemory) {
-                LogManager.warn("Tried to allocate " + initialMemory + "MB for initial memory which is more than "
-                        + maximumMemory + "MB set for the maximum memory!");
-                initialMemory = 512;
-                needToSave = true;
-            }
-        }
-
         if (systemMemory != 0 && maximumMemory > systemMemory) {
             LogManager.warn("Tried to allocate " + maximumMemory + "MB of maximum memory but only " + systemMemory
-                    + "MB is available to use!");
+                + "MB is available to use!");
 
             if (OS.is64Bit()) {
                 maximumMemory = Math.min((systemMemory / 1000) * 512, 8192);
@@ -428,7 +449,7 @@ public class Settings {
         int systemWindowWidth = OS.getMaximumWindowWidth();
         if (windowWidth > systemWindowWidth) {
             LogManager.warn("Tried to set window width to " + windowWidth + "px but the maximum is " + systemWindowWidth
-                    + "px!");
+                + "px!");
 
             windowWidth = systemWindowWidth;
         }
@@ -436,7 +457,7 @@ public class Settings {
         int systemWindowHeight = OS.getMaximumWindowHeight();
         if (windowHeight > systemWindowHeight) {
             LogManager.warn("Tried to set window height to " + windowHeight + "px but the maximum is "
-                    + systemWindowHeight + "px!");
+                + systemWindowHeight + "px!");
 
             windowHeight = systemWindowHeight;
         }
@@ -446,31 +467,31 @@ public class Settings {
         if (enableProxy) {
             if (proxyPort <= 0 || proxyPort > 65535) {
                 LogManager.warn("Tried to set proxy port to " + proxyPort
-                        + " which is not a valid port! Proxy support disabled!");
+                    + " which is not a valid port! Proxy support disabled!");
                 enableProxy = false;
                 proxyPort = 8080;
             }
 
             if (!proxyType.equals("SOCKS") && !proxyType.equals("HTTP") && !proxyType.equals("DIRECT")) {
                 LogManager.warn(
-                        "Tried to set proxy type to " + proxyType + " which is not valid! Proxy support disabled!");
+                    "Tried to set proxy type to " + proxyType + " which is not valid! Proxy support disabled!");
                 enableProxy = false;
                 proxyType = "HTTP";
             }
         }
 
         if (enableProxy) {
-            Type type = Type.HTTP;
+            Proxy.Type type = Proxy.Type.HTTP;
 
             switch (this.proxyType) {
                 case "HTTP":
-                    type = Type.HTTP;
+                    type = Proxy.Type.HTTP;
                     break;
                 case "SOCKS":
-                    type = Type.SOCKS;
+                    type = Proxy.Type.SOCKS;
                     break;
                 case "DIRECT":
-                    type = Type.DIRECT;
+                    type = Proxy.Type.DIRECT;
                     break;
             }
 
@@ -483,7 +504,7 @@ public class Settings {
     private void validateConcurrentConnections() {
         if (concurrentConnections < 1 || concurrentConnections > 100) {
             LogManager.warn("Tried to set the number of concurrent connections to " + concurrentConnections
-                    + " which is not valid! Must be between 1 and 100. Setting back to default of 8!");
+                + " which is not valid! Must be between 1 and 100. Setting back to default of 8!");
             concurrentConnections = 8;
         }
     }
@@ -491,7 +512,7 @@ public class Settings {
     private void validateConnectionTimeout() {
         if (connectionTimeout < 1 || connectionTimeout > 600) {
             LogManager.warn("Tried to set the number of connection timeout to " + connectionTimeout
-                    + " which is not valid! Must be between 1 and 600. Setting back to default of 60!");
+                + " which is not valid! Must be between 1 and 600. Setting back to default of 60!");
             connectionTimeout = 60;
         }
     }
@@ -499,7 +520,7 @@ public class Settings {
     private void validateDateFormat() {
         if (!Arrays.asList(Constants.DATE_FORMATS).contains(dateFormat)) {
             LogManager.warn("Tried to set the date format to " + dateFormat + " which is not valid! Setting "
-                    + "back to default of " + Constants.DATE_FORMATS[0] + "!");
+                + "back to default of " + Constants.DATE_FORMATS[0] + "!");
             dateFormat = Constants.DATE_FORMATS[0];
         }
     }
@@ -507,8 +528,8 @@ public class Settings {
     private void validateInstanceTitleFormat() {
         if (!Arrays.asList(Constants.INSTANCE_TITLE_FORMATS).contains(instanceTitleFormat)) {
             LogManager.warn(
-                    "Tried to set the instance title format to " + instanceTitleFormat + " which is not valid! Setting "
-                            + "back to default of " + Constants.INSTANCE_TITLE_FORMATS[0] + "!");
+                "Tried to set the instance title format to " + instanceTitleFormat + " which is not valid! Setting "
+                    + "back to default of " + Constants.INSTANCE_TITLE_FORMATS[0] + "!");
             instanceTitleFormat = Constants.INSTANCE_TITLE_FORMATS[0];
         }
 
@@ -524,9 +545,27 @@ public class Settings {
         }
     }
 
+    public void validateBackupsPath() {
+        if (backupsPath != null) {
+            try {
+                Path backupsPathPath = Paths.get(backupsPath);
+
+                // set to null if path is not a directory that exists
+                if (!Files.exists(backupsPathPath) || !Files.isDirectory(backupsPathPath)) {
+                    LogManager.warn("Backups Path Is Incorrect! Deleting setting!");
+                    backupsPath = null;
+                }
+            } catch (Exception e) {
+                LogManager.warn("Backups Path Is Incorrect! Deleting setting!");
+                backupsPath = null;
+            }
+        }
+    }
+
     public void save() {
-        try (FileWriter writer = new FileWriter(FileSystem.SETTINGS.toFile())) {
-            Gsons.DEFAULT.toJson(this, writer);
+        try (OutputStreamWriter fileWriter = new OutputStreamWriter(
+            Files.newOutputStream(FileSystem.SETTINGS), StandardCharsets.UTF_8)) {
+            Gsons.DEFAULT.toJson(this, fileWriter);
         } catch (IOException e) {
             LogManager.logStackTrace("Error saving settings", e);
         }

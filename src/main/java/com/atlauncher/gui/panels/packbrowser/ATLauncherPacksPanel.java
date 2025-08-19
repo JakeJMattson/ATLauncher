@@ -21,7 +21,6 @@ import java.awt.GridBagConstraints;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
@@ -42,8 +41,8 @@ import com.atlauncher.gui.card.packbrowser.ATLauncherPackCard;
 import com.atlauncher.managers.PackManager;
 
 public class ATLauncherPacksPanel extends PackBrowserPlatformPanel {
-    private final List<Pack> packs = new LinkedList<>();
-    private final List<ATLauncherPackCard> cards = new LinkedList<>();
+    private final List<Pack> packs = new ArrayList<>();
+    private final List<ATLauncherPackCard> cards = new ArrayList<>();
 
     private void loadPacksToShow(String minecraftVersion, String sort, boolean sortDescending, String searchText) {
         List<Pack> packs = sort.equalsIgnoreCase("name") ? PackManager.getPacksSortedAlphabetically(false,
@@ -85,7 +84,7 @@ public class ATLauncherPacksPanel extends PackBrowserPlatformPanel {
             boolean sortDescending, String search,
             int page) {
         this.packs.stream().skip(this.cards.size()).limit(10)
-                .forEach(pack -> this.cards.add(new ATLauncherPackCard(pack, false)));
+                .forEach(pack -> this.cards.add(new ATLauncherPackCard(pack)));
 
         GridBagConstraints gbc = new GridBagConstraints();
         gbc.gridx = 0;
@@ -182,22 +181,22 @@ public class ATLauncherPacksPanel extends PackBrowserPlatformPanel {
     public List<VersionManifestVersion> getSupportedMinecraftVersionsForFiltering() {
         List<VersionManifestVersion> minecraftVersions = new ArrayList<>();
 
-        PackManager.getPacks().stream().forEach(p -> {
-            minecraftVersions
-                    .addAll(p.versions.stream().map(v -> v.minecraftVersion).distinct().collect(Collectors.toList()));
-        });
+        PackManager.getPacks().forEach(p -> minecraftVersions
+                .addAll(p.versions.stream().map(v -> v.minecraftVersion).distinct().collect(Collectors.toList())));
 
-        return minecraftVersions.stream().distinct().sorted(Comparator.comparingLong((VersionManifestVersion mv) -> {
-            return ISODateTimeFormat.dateTimeParser().parseDateTime(mv.releaseTime).getMillis() / 1000;
-        }).reversed()).collect(Collectors.toList());
+        return minecraftVersions
+                .stream().distinct().sorted(Comparator.comparingLong((VersionManifestVersion mv) -> ISODateTimeFormat
+                        .dateTimeParser().parseDateTime(mv.releaseTime).getMillis() / 1000).reversed())
+                .collect(Collectors.toList());
     }
 
+    @Override
     public boolean supportsManualAdding() {
         return false;
     }
 
-    public void addById(String id) {
-    }
+    @Override
+    public void addById(String id) {}
 
     @Override
     public boolean hasPagination() {
@@ -207,11 +206,7 @@ public class ATLauncherPacksPanel extends PackBrowserPlatformPanel {
     @Override
     public boolean hasMorePages() {
         // already loaded in all the cards possible, so don't navigate
-        if (this.packs.size() != 0 && this.cards.size() != 0 && this.packs.size() == this.cards.size()) {
-            return false;
-        }
-
-        return true;
+        return this.packs.isEmpty() || this.cards.isEmpty() || this.packs.size() != this.cards.size();
     }
 
     @Override

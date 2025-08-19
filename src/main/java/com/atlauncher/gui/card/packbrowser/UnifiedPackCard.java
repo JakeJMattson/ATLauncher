@@ -20,6 +20,8 @@ package com.atlauncher.gui.card.packbrowser;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
+import java.awt.Font;
+import java.util.Locale;
 
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
@@ -28,17 +30,20 @@ import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
 import javax.swing.SwingConstants;
-import javax.swing.border.TitledBorder;
 import javax.swing.event.HyperlinkEvent;
+import javax.swing.text.html.HTMLDocument;
 
 import org.mini2Dx.gettext.GetText;
 
 import com.atlauncher.App;
 import com.atlauncher.builders.HTMLBuilder;
+import com.atlauncher.constants.UIConstants;
 import com.atlauncher.evnt.listener.RelocalizationListener;
 import com.atlauncher.evnt.manager.RelocalizationManager;
+import com.atlauncher.exceptions.InvalidPack;
 import com.atlauncher.graphql.fragment.UnifiedModPackResultsFragment;
 import com.atlauncher.graphql.type.ModPackPlatformType;
+import com.atlauncher.gui.borders.IconTitledBorder;
 import com.atlauncher.gui.components.BackgroundImageLabel;
 import com.atlauncher.gui.components.PackImagePanel;
 import com.atlauncher.gui.dialogs.InstanceInstallerDialog;
@@ -47,21 +52,22 @@ import com.atlauncher.managers.DialogManager;
 import com.atlauncher.managers.InstanceManager;
 import com.atlauncher.managers.PackManager;
 import com.atlauncher.network.Analytics;
+import com.atlauncher.network.analytics.AnalyticsEvent;
 import com.atlauncher.utils.Markdown;
 import com.atlauncher.utils.OS;
+import com.atlauncher.utils.Utils;
 
-@SuppressWarnings("serial")
 public class UnifiedPackCard extends JPanel implements RelocalizationListener {
-    private final JButton newInstanceButton = new JButton(GetText.tr("New Instance"));
+    private final JButton installButton = new JButton(GetText.tr("Install"));
     private final JButton createServerButton = new JButton(GetText.tr("Create Server"));
     private final JButton websiteButton = new JButton(GetText.tr("Website"));
 
     public UnifiedPackCard(final UnifiedModPackResultsFragment result) {
         super();
         setLayout(new BorderLayout());
-        setBorder(BorderFactory.createTitledBorder(null, result.name(), TitledBorder.LEADING,
-                TitledBorder.DEFAULT_POSITION,
-                App.THEME.getBoldFont().deriveFont(15f)));
+        setBorder(new IconTitledBorder(result.name(), App.THEME.getBoldFont().deriveFont(15f),
+                Utils.getIconImage(App.THEME.getResourcePath("image/modpack-platform",
+                        result.platform().toString().toLowerCase(Locale.ENGLISH)))));
 
         RelocalizationManager.addListener(this);
 
@@ -71,7 +77,8 @@ public class UnifiedPackCard extends JPanel implements RelocalizationListener {
             try {
                 splitter.setLeftComponent(
                         new PackImagePanel(PackManager.getPackByID(Integer.parseInt(result.id()))));
-            } catch (Exception e) {
+            } catch (InvalidPack | NumberFormatException e) {
+                // ignored
             }
         } else {
             String imageUrl = null;
@@ -89,23 +96,29 @@ public class UnifiedPackCard extends JPanel implements RelocalizationListener {
         splitter.setRightComponent(actionsPanel);
         splitter.setEnabled(false);
 
-        JPanel buttonsPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 5, 2));
+        JPanel buttonsPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 5, 0));
+        buttonsPanel.setBorder(BorderFactory.createEmptyBorder(5, 0, 5, 0));
 
-        newInstanceButton.addActionListener(e -> {
+        installButton.addActionListener(e -> {
             if (AccountManager.getSelectedAccount() == null) {
                 DialogManager.okDialog().setTitle(GetText.tr("No Account Selected"))
                         .setContent(GetText.tr("Cannot create instance as you have no account selected."))
                         .setType(DialogManager.ERROR).show();
+
+                if (AccountManager.getAccounts().isEmpty()) {
+                    App.navigate(UIConstants.LAUNCHER_ACCOUNTS_TAB);
+                }
             } else {
-                Analytics.sendEvent(result.name(), "Install", "UnifiedModPackSearch");
-                new InstanceInstallerDialog(result, false);
+                Analytics.trackEvent(AnalyticsEvent.forPackInstall(result));
+                InstanceInstallerDialog instanceInstallerDialog = new InstanceInstallerDialog(result, false);
+                instanceInstallerDialog.setVisible(true);
             }
         });
-        buttonsPanel.add(newInstanceButton);
+        buttonsPanel.add(installButton);
 
         createServerButton.addActionListener(e -> {
             // user has no instances, they may not be aware this is not how to play
-            if (InstanceManager.getInstances().size() == 0) {
+            if (InstanceManager.getInstances().isEmpty()) {
                 int ret = DialogManager.yesNoDialog().setTitle(GetText.tr("Are you sure you want to create a server?"))
                         .setContent(new HTMLBuilder().center().text(GetText.tr(
                                 "Creating a server won't allow you play Minecraft, it's for letting others play together.<br/><br/>If you just want to play Minecraft, you don't want to create a server, and instead will want to create an instance.<br/><br/>Are you sure you want to create a server?"))
@@ -121,18 +134,25 @@ public class UnifiedPackCard extends JPanel implements RelocalizationListener {
                 DialogManager.okDialog().setTitle(GetText.tr("No Account Selected"))
                         .setContent(GetText.tr("Cannot create server as you have no account selected."))
                         .setType(DialogManager.ERROR).show();
+
+                if (AccountManager.getAccounts().isEmpty()) {
+                    App.navigate(UIConstants.LAUNCHER_ACCOUNTS_TAB);
+                }
             } else {
-                Analytics.sendEvent(result.name(), "ServerInstall", "UnifiedModPackSearch");
-                new InstanceInstallerDialog(result, true);
+                Analytics.trackEvent(AnalyticsEvent.forPackInstall(result, true));
+                InstanceInstallerDialog instanceInstallerDialog = new InstanceInstallerDialog(result, true);
+                instanceInstallerDialog.setVisible(true);
             }
         });
         buttonsPanel.add(createServerButton);
 
-        boolean showCreateServerButton = result.platform() == ModPackPlatformType.MODRINTH;
+        boolean showCreateServerButton = result.platform() == ModPackPlatformType.MODRINTH
+                || result.platform() == ModPackPlatformType.CURSEFORGE;
         if (result.platform() == ModPackPlatformType.ATLAUNCHER) {
             try {
                 showCreateServerButton = PackManager.getPackByID(Integer.parseInt(result.id())).createServer;
-            } catch (Exception e) {
+            } catch (InvalidPack | NumberFormatException e) {
+                // ignored
             }
         }
         createServerButton.setVisible(showCreateServerButton);
@@ -142,7 +162,14 @@ public class UnifiedPackCard extends JPanel implements RelocalizationListener {
 
         JEditorPane descArea = new JEditorPane("text/html",
                 String.format("<html>%s</html>", Markdown.render(result.summary())));
+
+        Font font = App.THEME.getNormalFont();
+        String bodyRule = "p { font-family: " + font.getFamily() + "; " +
+                "font-size: " + font.getSize() + "pt; }";
+        ((HTMLDocument) descArea.getDocument()).getStyleSheet().addRule(bodyRule);
         descArea.setEditable(false);
+        descArea.setFocusable(false);
+        descArea.setHighlighter(null);
         descArea.addHyperlinkListener(e -> {
             if (e.getEventType() == HyperlinkEvent.EventType.ACTIVATED) {
                 OS.openWebBrowser(e.getURL());
@@ -159,7 +186,7 @@ public class UnifiedPackCard extends JPanel implements RelocalizationListener {
 
     @Override
     public void onRelocalization() {
-        newInstanceButton.setText(GetText.tr("New Instance"));
+        installButton.setText(GetText.tr("New Instance"));
         websiteButton.setText(GetText.tr("Website"));
     }
 }

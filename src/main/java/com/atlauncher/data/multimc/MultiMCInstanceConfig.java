@@ -19,12 +19,10 @@ package com.atlauncher.data.multimc;
 
 import java.util.Properties;
 
-import com.atlauncher.managers.ConfigManager;
-
 public class MultiMCInstanceConfig {
     public String name;
 
-    public Integer initialMemory;
+    public String iconKey;
     public Integer maximumMemory;
     public Integer permGen;
     public String javaPath;
@@ -40,9 +38,8 @@ public class MultiMCInstanceConfig {
             name = "MultiMC Import";
         }
 
-        if (props.getProperty("MinMemAlloc") != null
-                && ConfigManager.getConfigItem("removeInitialMemoryOption", false) == false) {
-            initialMemory = Integer.parseInt(props.getProperty("MinMemAlloc"));
+        if (props.getProperty("iconKey") != null) {
+            iconKey = props.getProperty("iconKey");
         }
 
         if (props.getProperty("MaxMemAlloc") != null) {
@@ -57,8 +54,8 @@ public class MultiMCInstanceConfig {
             javaPath = props.getProperty("JavaPath");
         }
 
-        if (props.getProperty("JvmArgs") != null) {
-            javaArguments = props.getProperty("JvmArgs");
+        if (props.getProperty("JVMArgs") != null) {
+            javaArguments = props.getProperty("JVMArgs");
         }
 
         if (props.getProperty("PreLaunchCommand") != null) {

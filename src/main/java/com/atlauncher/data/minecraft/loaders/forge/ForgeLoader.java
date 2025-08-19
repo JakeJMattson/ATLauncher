@@ -18,20 +18,21 @@
 package com.atlauncher.data.minecraft.loaders.forge;
 
 import java.io.File;
-import java.io.FileReader;
-import java.io.IOException;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import com.atlauncher.FileSystem;
 import com.atlauncher.Gsons;
 import com.atlauncher.Network;
 import com.atlauncher.constants.Constants;
-import com.atlauncher.data.APIResponse;
 import com.atlauncher.data.minecraft.ArgumentRule;
 import com.atlauncher.data.minecraft.Arguments;
 import com.atlauncher.data.minecraft.Library;
@@ -42,11 +43,12 @@ import com.atlauncher.managers.ConfigManager;
 import com.atlauncher.managers.LogManager;
 import com.atlauncher.network.Download;
 import com.atlauncher.network.GraphqlClient;
+import com.atlauncher.network.NetworkClient;
 import com.atlauncher.utils.FileUtils;
 import com.atlauncher.utils.Pair;
 import com.atlauncher.workers.InstanceInstaller;
-import com.google.gson.reflect.TypeToken;
 
+import okhttp3.CacheControl;
 import okhttp3.OkHttpClient;
 
 public class ForgeLoader implements Loader {
@@ -56,6 +58,9 @@ public class ForgeLoader implements Loader {
     protected Long installerSize;
     protected String installerSha1;
     protected String minecraft;
+    /**
+     * TODO Replace with Path. No usages of file methods used.
+     */
     protected File tempDir;
     protected InstanceInstaller instanceInstaller;
     protected Path installerPath;
@@ -117,7 +122,8 @@ public class ForgeLoader implements Loader {
     }
 
     public static ForgePromotions getPromotions() {
-        return Download.build().cached().setUrl(Constants.FORGE_PROMOTIONS_FILE).asClass(ForgePromotions.class);
+        return NetworkClient.getCached(Constants.FORGE_PROMOTIONS_FILE, ForgePromotions.class,
+                new CacheControl.Builder().maxStale(10, TimeUnit.MINUTES).build());
     }
 
     public String getLatestVersion() {
@@ -206,9 +212,10 @@ public class ForgeLoader implements Loader {
     public ForgeInstallProfile getInstallProfile() {
         ForgeInstallProfile installProfile = null;
 
-        try {
-            installProfile = Gsons.MINECRAFT.fromJson(new FileReader(new File(this.tempDir, "install_profile.json")),
-                    ForgeInstallProfile.class);
+        try (InputStreamReader fileReader = new InputStreamReader(
+                Files.newInputStream(new File(this.tempDir, "install_profile.json").toPath()),
+                StandardCharsets.UTF_8)) {
+            installProfile = Gsons.DEFAULT.fromJson(fileReader, ForgeInstallProfile.class);
         } catch (Throwable e) {
             LogManager.logStackTrace(e);
         }
@@ -223,9 +230,9 @@ public class ForgeLoader implements Loader {
 
         ForgeInstallProfile versionInfo = null;
 
-        try {
-            versionInfo = Gsons.MINECRAFT.fromJson(new FileReader(new File(this.tempDir, "version.json")),
-                    ForgeInstallProfile.class);
+        try (InputStreamReader fileReader = new InputStreamReader(
+                Files.newInputStream(new File(this.tempDir, "version.json").toPath()), StandardCharsets.UTF_8)) {
+            versionInfo = Gsons.DEFAULT.fromJson(fileReader, ForgeInstallProfile.class);
         } catch (Throwable e) {
             LogManager.logStackTrace(e);
         }
@@ -278,6 +285,19 @@ public class ForgeLoader implements Loader {
     }
 
     @Override
+    public Path getServerJarPath() {
+        Library forgeLibrary = getLibraries().stream()
+                .filter(library -> library.name.startsWith("net.minecraftforge:forge")).findFirst()
+                .orElse(null);
+
+        if (forgeLibrary != null) {
+            return FileSystem.LIBRARIES.resolve(forgeLibrary.downloads.artifact.path);
+        }
+
+        return null;
+    }
+
+    @Override
     public boolean useMinecraftLibraries() {
         return !this.instanceInstaller.isServer;
     }
@@ -288,96 +308,50 @@ public class ForgeLoader implements Loader {
     }
 
     public static List<LoaderVersion> getChoosableVersions(String minecraft) {
-        java.lang.reflect.Type type = new TypeToken<APIResponse<List<ATLauncherApiForgeVersion>>>() {
-        }.getType();
+        GetForgeLoaderVersionsForMinecraftVersionQuery.Data response = GraphqlClient
+                .callAndWait(new GetForgeLoaderVersionsForMinecraftVersionQuery(minecraft));
 
-        try {
-            if (ConfigManager.getConfigItem("useGraphql.loaderVersions", false) == true) {
-                GetForgeLoaderVersionsForMinecraftVersionQuery.Data response = GraphqlClient
-                        .callAndWait(new GetForgeLoaderVersionsForMinecraftVersionQuery(minecraft));
-
-                if (response == null) {
-                    return new ArrayList<LoaderVersion>();
-                }
-
-                List<String> disabledVersions = ConfigManager.getConfigItem("loaders.forge.disabledVersions",
-                        new ArrayList<String>());
-
-                return response.loaderVersions().forge().stream().filter(fv -> !disabledVersions.contains(
-                        fv.version()))
-                        .map(version -> {
-                            LoaderVersion lv = new LoaderVersion(version.version(), version.rawVersion(),
-                                    version.recommended(),
-                                    "Forge");
-
-                            if (version.installerSha1Hash() != null && version.installerSize() != null) {
-                                lv.downloadables.put("installer",
-                                        new Pair<String, Long>(version.installerSha1Hash(), version.installerSize()
-                                                .longValue()));
-                            }
-
-                            if (version.universalSha1Hash() != null && version.universalSize() != null) {
-                                lv.downloadables.put("universal",
-                                        new Pair<String, Long>(version.universalSha1Hash(), version.universalSize()
-                                                .longValue()));
-                            }
-
-                            if (version.clientSha1Hash() != null && version.clientSize() != null) {
-                                lv.downloadables.put("client",
-                                        new Pair<String, Long>(version.clientSha1Hash(), version.clientSize()
-                                                .longValue()));
-                            }
-
-                            if (version.serverSha1Hash() != null && version.serverSize() != null) {
-                                lv.downloadables.put("server",
-                                        new Pair<String, Long>(version.serverSha1Hash(), version.serverSize()
-                                                .longValue()));
-                            }
-
-                            return lv;
-                        })
-                        .collect(Collectors.toList());
-            } else {
-                APIResponse<List<ATLauncherApiForgeVersion>> data = Download.build()
-                        .setUrl(String.format("%sforge-versions/%s", Constants.API_BASE_URL, minecraft))
-                        .asTypeWithThrow(type);
-
-                List<String> disabledVersions = ConfigManager.getConfigItem("loaders.forge.disabledVersions",
-                        new ArrayList<String>());
-
-                return data.getData().stream().filter(fv -> !disabledVersions.contains(fv.version))
-                        .map(version -> {
-                            LoaderVersion lv = new LoaderVersion(version.version, version.rawVersion,
-                                    version.recommended,
-                                    "Forge");
-
-                            if (version.installerSha1Hash != null && version.installerSize != null) {
-                                lv.downloadables.put("installer",
-                                        new Pair<String, Long>(version.installerSha1Hash, version.installerSize));
-                            }
-
-                            if (version.universalSha1Hash != null && version.universalSize != null) {
-                                lv.downloadables.put("universal",
-                                        new Pair<String, Long>(version.universalSha1Hash, version.universalSize));
-                            }
-
-                            if (version.clientSha1Hash != null && version.clientSize != null) {
-                                lv.downloadables.put("client",
-                                        new Pair<String, Long>(version.clientSha1Hash, version.clientSize));
-                            }
-
-                            if (version.serverSha1Hash != null && version.serverSize != null) {
-                                lv.downloadables.put("server",
-                                        new Pair<String, Long>(version.serverSha1Hash, version.serverSize));
-                            }
-
-                            return lv;
-                        })
-                        .collect(Collectors.toList());
-            }
-        } catch (IOException e) {
-            return new ArrayList<LoaderVersion>();
+        if (response == null) {
+            return new ArrayList<>();
         }
+
+        List<String> disabledVersions = ConfigManager.getConfigItem("loaders.forge.disabledVersions",
+                new ArrayList<>());
+
+        return response.loaderVersions().forge().stream().filter(fv -> !disabledVersions.contains(
+                fv.version()))
+                .map(version -> {
+                    LoaderVersion lv = new LoaderVersion(version.version(), version.rawVersion(),
+                            version.recommended(),
+                            "Forge");
+
+                    if (version.installerSha1Hash() != null && version.installerSize() != null) {
+                        lv.downloadables.put("installer",
+                                new Pair<>(version.installerSha1Hash(), version.installerSize()
+                                        .longValue()));
+                    }
+
+                    if (version.universalSha1Hash() != null && version.universalSize() != null) {
+                        lv.downloadables.put("universal",
+                                new Pair<>(version.universalSha1Hash(), version.universalSize()
+                                        .longValue()));
+                    }
+
+                    if (version.clientSha1Hash() != null && version.clientSize() != null) {
+                        lv.downloadables.put("client",
+                                new Pair<>(version.clientSha1Hash(), version.clientSize()
+                                        .longValue()));
+                    }
+
+                    if (version.serverSha1Hash() != null && version.serverSize() != null) {
+                        lv.downloadables.put("server",
+                                new Pair<>(version.serverSha1Hash(), version.serverSize()
+                                        .longValue()));
+                    }
+
+                    return lv;
+                })
+                .collect(Collectors.toList());
     }
 
     @Override

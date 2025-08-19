@@ -40,8 +40,10 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
@@ -49,6 +51,7 @@ import java.util.stream.Collectors;
 import com.atlauncher.App;
 import com.atlauncher.FileSystem;
 import com.atlauncher.constants.Constants;
+import com.atlauncher.graphql.type.LauncherInstallMethod;
 import com.atlauncher.managers.LogManager;
 import com.atlauncher.managers.PerformanceManager;
 import com.atlauncher.network.Analytics;
@@ -81,7 +84,7 @@ public enum OS {
                     || WINDOWS_ANTIVIRUS_PROCESS_PATHS.contains(process.getPath());
 
     public static OS getOS() {
-        String osName = System.getProperty("os.name").toLowerCase();
+        String osName = System.getProperty("os.name").toLowerCase(Locale.ENGLISH);
 
         if (osName.contains("win")) {
             return OS.WINDOWS;
@@ -118,12 +121,14 @@ public enum OS {
     public static Path storagePath() {
         switch (getOS()) {
             case WINDOWS:
-                return Paths.get(System.getenv("APPDATA")).resolve("." + Constants.LAUNCHER_NAME.toLowerCase());
+                return Paths.get(System.getenv("APPDATA"))
+                        .resolve("." + Constants.LAUNCHER_NAME.toLowerCase(Locale.ENGLISH));
             case OSX:
                 return Paths.get(System.getProperty("user.home")).resolve("Library").resolve("Application Support")
-                        .resolve("." + Constants.LAUNCHER_NAME.toLowerCase());
+                        .resolve("." + Constants.LAUNCHER_NAME.toLowerCase(Locale.ENGLISH));
             default:
-                return Paths.get(System.getProperty("user.home")).resolve("." + Constants.LAUNCHER_NAME.toLowerCase());
+                return Paths.get(System.getProperty("user.home"))
+                        .resolve("." + Constants.LAUNCHER_NAME.toLowerCase(Locale.ENGLISH));
         }
     }
 
@@ -213,6 +218,21 @@ public enum OS {
         }
     }
 
+    public static void openFile(Path path) {
+        try {
+            if (Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.OPEN)) {
+                Desktop.getDesktop().open(path.toFile());
+            } else if (getOS() == LINUX && (Files.exists(Paths.get("/usr/bin/xdg-open"))
+                    || Files.exists(Paths.get("/usr/local/bin/xdg-open")))) {
+                Runtime.getRuntime().exec("xdg-open " + path.toString());
+            } else {
+                LogManager.error("Cannot open file as no supported methods were found");
+            }
+        } catch (Exception e) {
+            LogManager.logStackTrace("Error opening file!", e);
+        }
+    }
+
     /**
      * Os slash.
      *
@@ -266,7 +286,7 @@ public enum OS {
     }
 
     public static JavaInfo getPreferredJava(List<JavaInfo> installedJavas) {
-        if (installedJavas.size() == 0) {
+        if (installedJavas.isEmpty()) {
             return null;
         }
 
@@ -274,7 +294,7 @@ public enum OS {
                 .filter(javaInfo -> javaInfo.majorVersion != null && javaInfo.minorVersion != null)
                 .collect(Collectors.toList());
 
-        if (validVersions.size() == 0) {
+        if (validVersions.isEmpty()) {
             return null;
         }
 
@@ -309,6 +329,7 @@ public enum OS {
 
             return os.getBitness() == 64;
         } catch (Throwable ignored) {
+            // ignored
         }
 
         // worse case fallback to checking the Java install
@@ -480,6 +501,38 @@ public enum OS {
 
     /**
      * This restarts the launcher with an option set of arguments to add.
+     */
+    public static void restartToUpdateBundledJre(Path newJrePath) {
+        String path = getRunningProgramPath().toString();
+
+        List<String> arguments = new ArrayList<>();
+
+        arguments.add(Java.getPathToJavaExecutable(newJrePath));
+        arguments.add("-Djna.nosys=true");
+        arguments.add("-cp");
+        arguments.add(path);
+        arguments.add("com.atlauncher.UpdateBundledJre");
+        arguments.add(newJrePath.toAbsolutePath().toString());
+        arguments.add(FileSystem.JRE.toAbsolutePath().toString());
+        arguments.add(path);
+
+        // pass in all the original arguments
+        arguments.addAll(Arrays.asList(App.PASSED_ARGS));
+
+        ProcessBuilder processBuilder = new ProcessBuilder();
+        processBuilder.directory(FileSystem.BASE_DIR.toFile());
+        processBuilder.command(arguments);
+
+        try {
+            processBuilder.start();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        System.exit(0);
+    }
+
+    /**
+     * This restarts the launcher with an option set of arguments to add.
      *
      * @param args a List of arguments to pass when starting the launcher
      */
@@ -515,6 +568,7 @@ public enum OS {
         } catch (IOException e) {
             e.printStackTrace();
         }
+        Analytics.endSession();
         System.exit(0);
     }
 
@@ -559,7 +613,7 @@ public enum OS {
      * This restarts the launcher in debug mode.
      */
     public static void relaunchInDebugMode() {
-        restartLauncher(new ArrayList<>(Arrays.asList("--debug")));
+        restartLauncher(new ArrayList<>(Collections.singletonList("--debug")));
     }
 
     /**
@@ -586,7 +640,7 @@ public enum OS {
             }
             case OSX: {
                 // M1 machines still show Intel
-                name = String.format("Macintosh; Intel %s %s", getName(), getVersion().replaceAll(".", "_"));
+                name = String.format("Macintosh; Intel %s %s", getName(), getVersion().replaceAll("\\.", "_"));
                 break;
             }
             case LINUX: {
@@ -612,6 +666,7 @@ public enum OS {
                     antivirusProcesses = os.getProcesses(OS.WINDOWS_ANTIVIRUS_PROCESS_FILTER,
                             ProcessSorting.PID_ASC, 0);
                 } catch (Throwable ignored) {
+                    // ignored
                 }
             }
 
@@ -623,10 +678,40 @@ public enum OS {
 
     public static boolean isUsingAntivirus() {
         if (isWindows()) {
-            return Optional.ofNullable(getAntivirusProcesses()).orElse(new ArrayList<>()).size() != 0;
+            return !Optional.ofNullable(getAntivirusProcesses()).orElse(new ArrayList<>()).isEmpty();
         }
 
         return false;
+    }
+
+    public static String getAnalyticsOSName() {
+        if (isWindows()) {
+            return "WINDOWS";
+        } else if (isMac()) {
+            return "MACOS";
+        } else if (isLinux()) {
+            return "LINUX";
+        }
+
+        return "UNKNOWN";
+    }
+
+    public static String getAnalyticsOSArch() {
+        if (isArm()) {
+            if (is64Bit()) {
+                return "ARM64";
+            } else {
+                return "ARM32";
+            }
+        }
+
+        if (is64Bit()) {
+            return "X64";
+        } else if (!is64Bit()) {
+            return "X86";
+        }
+
+        return "UNKNOWN";
     }
 
     public static String getLWJGLClassifier() {
@@ -655,5 +740,125 @@ public enum OS {
 
     public static String getNativesArch() {
         return OS.is64Bit() ? "64" : "32";
+    }
+
+    public static boolean usingExe() {
+        return getRunningProgramPath().getFileName().toString().endsWith("exe");
+    }
+
+    public static LauncherInstallMethod getInstallMethod() {
+        if (isWindows()) {
+            Path path = getRunningProgramPath();
+
+            if (path.getFileName().toString().endsWith("exe")) {
+                if (usedInstaller()) {
+                    return LauncherInstallMethod.WINDOWS_SETUP;
+                }
+
+                return LauncherInstallMethod.WINDOWS_PORTABLE;
+            }
+
+            if (path.getFileName().toString().endsWith("jar")) {
+                return LauncherInstallMethod.WINDOWS_JAR;
+            }
+
+            if (Files.isDirectory(path)) {
+                return LauncherInstallMethod.WINDOWS_SOURCE;
+            }
+
+            return LauncherInstallMethod.WINDOWS_UNKNOWN;
+        } else if (isMac()) {
+            if (isUsingMacApp()) {
+                return LauncherInstallMethod.MAC_APP;
+            }
+
+            Path path = getRunningProgramPath();
+
+            if (path.getFileName().toString().endsWith("jar")) {
+                return LauncherInstallMethod.MAC_JAR;
+            }
+
+            if (Files.isDirectory(path)) {
+                return LauncherInstallMethod.MAC_SOURCE;
+            }
+
+            return LauncherInstallMethod.MAC_UNKNOWN;
+        } else {
+            if (isUsingFlatpak()) {
+                return LauncherInstallMethod.LINUX_FLATPAK;
+            }
+
+            if (App.installMethod != null) {
+                if (App.installMethod.equalsIgnoreCase("deb")) {
+                    return LauncherInstallMethod.LINUX_DEB;
+                }
+
+                if (App.installMethod.equalsIgnoreCase("rpm")) {
+                    return LauncherInstallMethod.LINUX_RPM;
+                }
+
+                if (App.installMethod.equalsIgnoreCase("aur")) {
+                    return LauncherInstallMethod.LINUX_AUR;
+                }
+
+                if (App.installMethod.equalsIgnoreCase("aur-bin")) {
+                    return LauncherInstallMethod.LINUX_AUR_BIN;
+                }
+
+                return LauncherInstallMethod.LINUX_UNKNOWN;
+            }
+
+            Path path = getRunningProgramPath();
+
+            if (path.getFileName().toString().endsWith("jar")) {
+                return LauncherInstallMethod.LINUX_JAR;
+            }
+
+            if (Files.isDirectory(path)) {
+                return LauncherInstallMethod.LINUX_SOURCE;
+            }
+
+            return LauncherInstallMethod.LINUX_UNKNOWN;
+        }
+    }
+
+    public static String getInstallMethodForAnalytics() {
+        switch (getInstallMethod()) {
+            case LINUX_AUR:
+                return "AUR";
+            case LINUX_AUR_BIN:
+                return "AUR_BIN";
+            case LINUX_DEB:
+                return "DEB";
+            case LINUX_FLATPAK:
+                return "FLATPAK";
+            case LINUX_RPM:
+                return "RPM";
+            case MAC_APP:
+                return "MAC_APP";
+            case WINDOWS_JAR:
+            case LINUX_JAR:
+            case MAC_JAR:
+                return "JAR";
+            case WINDOWS_PORTABLE:
+                return "EXE";
+            case WINDOWS_SETUP:
+                return "WINDOWS_SETUP";
+            case LINUX_SOURCE:
+            case MAC_SOURCE:
+            case WINDOWS_SOURCE:
+                return "SOURCE";
+            default:
+            case $UNKNOWN:
+            case WINDOWS_UNKNOWN:
+            case MAC_UNKNOWN:
+            case LINUX_UNKNOWN:
+                return "UNKNOWN";
+        }
+    }
+
+    public static boolean usedInstaller() {
+        return Files.exists(FileSystem.BASE_DIR.resolve("unins000.dat"))
+                && Files.exists(FileSystem.BASE_DIR.resolve("unins000.exe"));
     }
 }

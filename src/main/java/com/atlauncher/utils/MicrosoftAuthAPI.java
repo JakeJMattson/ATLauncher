@@ -24,16 +24,21 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import javax.annotation.Nullable;
+
 import com.atlauncher.Gsons;
 import com.atlauncher.constants.Constants;
 import com.atlauncher.data.microsoft.Entitlements;
 import com.atlauncher.data.microsoft.LoginResponse;
+import com.atlauncher.data.microsoft.OauthDeviceCodeResponse;
 import com.atlauncher.data.microsoft.OauthTokenResponse;
 import com.atlauncher.data.microsoft.Profile;
 import com.atlauncher.data.microsoft.XboxLiveAuthResponse;
-import com.atlauncher.network.Download;
+import com.atlauncher.network.DownloadException;
+import com.atlauncher.network.NetworkClient;
 
 import okhttp3.FormBody;
+import okhttp3.Headers;
 import okhttp3.MediaType;
 import okhttp3.RequestBody;
 
@@ -43,98 +48,119 @@ import okhttp3.RequestBody;
 public class MicrosoftAuthAPI {
     public static OauthTokenResponse tradeCodeForAccessToken(String code) {
         RequestBody data = new FormBody.Builder().add("client_id", Constants.MICROSOFT_LOGIN_CLIENT_ID)
-                .add("code", code).add("grant_type", "authorization_code")
-                .add("redirect_uri", Constants.MICROSOFT_LOGIN_REDIRECT_URL)
-                .add("scope", String.join(" ", Constants.MICROSOFT_LOGIN_SCOPES)).build();
+            .add("code", code).add("grant_type", "authorization_code")
+            .add("redirect_uri", Constants.MICROSOFT_LOGIN_REDIRECT_URL)
+            .add("scope", String.join(" ", Constants.MICROSOFT_LOGIN_SCOPES)).build();
 
-        OauthTokenResponse oauthTokenResponse = Download.build().setUrl(Constants.MICROSOFT_AUTH_TOKEN_URL)
-                .header("Content-Type", "application/x-www-form-urlencoded").post(data)
-                .asClass(OauthTokenResponse.class, Gsons.DEFAULT);
+        OauthTokenResponse oauthTokenResponse = NetworkClient.post(Constants.MICROSOFT_AUTH_TOKEN_URL,
+            Headers.of("Content-Type", "application/x-www-form-urlencoded"), data, OauthTokenResponse.class);
 
         return oauthTokenResponse;
     }
 
+    public static OauthDeviceCodeResponse getDeviceCode() {
+        RequestBody data = new FormBody.Builder().add("client_id", Constants.MICROSOFT_LOGIN_CLIENT_ID)
+            .add("scope", String.join(" ", Constants.MICROSOFT_LOGIN_SCOPES)).build();
+
+        OauthDeviceCodeResponse deviceCodeResponse = NetworkClient.post(Constants.MICROSOFT_DEVICE_CODE_URL,
+            Headers.of("Content-Type", "application/x-www-form-urlencoded"), data, OauthDeviceCodeResponse.class);
+
+        return deviceCodeResponse;
+    }
+
+    public static OauthTokenResponse checkDeviceCodeForToken(String deviceCode) throws IOException {
+        RequestBody data = new FormBody.Builder().add("client_id", Constants.MICROSOFT_LOGIN_CLIENT_ID)
+            .add("device_code", deviceCode).add("grant_type", "urn:ietf:params:oauth:grant-type:device_code")
+            .build();
+
+        OauthTokenResponse deviceCodeTokenResponse = NetworkClient.postWithThrow(Constants.MICROSOFT_AUTH_TOKEN_URL,
+            Headers.of("Content-Type", "application/x-www-form-urlencoded"), data, OauthTokenResponse.class);
+
+        return deviceCodeTokenResponse;
+    }
+
     public static OauthTokenResponse refreshAccessToken(String refreshToken) {
         RequestBody data = new FormBody.Builder().add("client_id", Constants.MICROSOFT_LOGIN_CLIENT_ID)
-                .add("refresh_token", refreshToken).add("grant_type", "refresh_token")
-                .add("redirect_uri", Constants.MICROSOFT_LOGIN_REDIRECT_URL).build();
+            .add("refresh_token", refreshToken).add("grant_type", "refresh_token")
+            .add("redirect_uri", Constants.MICROSOFT_LOGIN_REDIRECT_URL).build();
 
-        OauthTokenResponse oauthTokenResponse = Download.build().setUrl(Constants.MICROSOFT_AUTH_TOKEN_URL)
-                .header("Content-Type", "application/x-www-form-urlencoded").post(data)
-                .asClass(OauthTokenResponse.class, Gsons.DEFAULT);
+        OauthTokenResponse oauthTokenResponse = NetworkClient.post(Constants.MICROSOFT_AUTH_TOKEN_URL,
+            Headers.of("Content-Type", "application/x-www-form-urlencoded"), data, OauthTokenResponse.class);
 
         return oauthTokenResponse;
     }
 
     public static XboxLiveAuthResponse getXBLToken(String accessToken) {
-        Map<Object, Object> properties = new HashMap<Object, Object>();
+        Map<Object, Object> properties = new HashMap<>();
         properties.put("AuthMethod", "RPS");
         properties.put("SiteName", "user.auth.xboxlive.com");
         properties.put("RpsTicket", "d=" + accessToken);
 
-        Map<Object, Object> data = new HashMap<Object, Object>();
+        Map<Object, Object> data = new HashMap<>();
         data.put("Properties", properties);
         data.put("RelyingParty", "http://auth.xboxlive.com");
         data.put("TokenType", "JWT");
 
-        XboxLiveAuthResponse xblAuthResponse = Download.build().setUrl(Constants.MICROSOFT_XBL_AUTH_TOKEN_URL)
-                .header("Content-Type", "application/json").header("Accept", "application/json")
-                .header("x-xbl-contract-version", "1")
-                .post(RequestBody.create(Gsons.DEFAULT.toJson(data), MediaType.get("application/json; charset=utf-8")))
-                .asClass(XboxLiveAuthResponse.class);
+        XboxLiveAuthResponse xblAuthResponse = NetworkClient.post(Constants.MICROSOFT_XBL_AUTH_TOKEN_URL,
+            Headers.of("Content-Type", "application/json", "Accept", "application/json", "x-xbl-contract-version",
+                "1"),
+            RequestBody.create(Gsons.DEFAULT.toJson(data), MediaType.get("application/json; charset=utf-8")),
+            XboxLiveAuthResponse.class);
 
         return xblAuthResponse;
     }
 
     public static XboxLiveAuthResponse getXstsToken(String xblToken) throws IOException {
-        Map<Object, Object> properties = new HashMap<Object, Object>();
+        Map<Object, Object> properties = new HashMap<>();
         properties.put("SandboxId", "RETAIL");
 
-        List<String> userTokens = new ArrayList<String>();
+        List<String> userTokens = new ArrayList<>();
         userTokens.add(xblToken);
         properties.put("UserTokens", userTokens);
 
-        Map<Object, Object> data = new HashMap<Object, Object>();
+        Map<Object, Object> data = new HashMap<>();
         data.put("Properties", properties);
         data.put("RelyingParty", "rp://api.minecraftservices.com/");
         data.put("TokenType", "JWT");
 
-        XboxLiveAuthResponse xstsAuthResponse = Download.build().setUrl(Constants.MICROSOFT_XSTS_AUTH_TOKEN_URL)
-                .header("Content-Type", "application/json").header("Accept", "application/json")
-                .header("x-xbl-contract-version", "1")
-                .post(RequestBody.create(Gsons.DEFAULT.toJson(data), MediaType.get("application/json; charset=utf-8")))
-                .asClassWithThrow(XboxLiveAuthResponse.class);
+        XboxLiveAuthResponse xstsAuthResponse = NetworkClient.postWithThrow(Constants.MICROSOFT_XSTS_AUTH_TOKEN_URL,
+            Headers.of("Content-Type", "application/json", "Accept", "application/json", "x-xbl-contract-version",
+                "1"),
+            RequestBody.create(Gsons.DEFAULT.toJson(data), MediaType.get("application/json; charset=utf-8")),
+            XboxLiveAuthResponse.class);
 
         return xstsAuthResponse;
     }
 
     public static LoginResponse loginToMinecraft(String xstsToken) {
-        Map<Object, Object> data = new HashMap<Object, Object>();
+        Map<Object, Object> data = new HashMap<>();
         data.put("xtoken", xstsToken);
         data.put("platform", "PC_LAUNCHER");
 
-        LoginResponse loginResponse = Download.build().setUrl(Constants.MICROSOFT_MINECRAFT_LOGIN_URL)
-                .header("Content-Type", "application/json").header("Accept", "application/json")
-                .post(RequestBody.create(Gsons.DEFAULT.toJson(data), MediaType.get("application/json; charset=utf-8")))
-                .asClass(LoginResponse.class);
+        LoginResponse loginResponse = NetworkClient.post(Constants.MICROSOFT_MINECRAFT_LOGIN_URL,
+            Headers.of("Content-Type", "application/json", "Accept", "application/json"),
+            RequestBody.create(Gsons.DEFAULT.toJson(data), MediaType.get("application/json; charset=utf-8")),
+            LoginResponse.class);
 
         return loginResponse;
     }
 
     public static Entitlements getEntitlements(String accessToken) {
-        Entitlements entitlementsResponse = Download.build()
-                .setUrl(String.format("%s?requestId=%s", Constants.MICROSOFT_MINECRAFT_ENTITLEMENTS_URL,
-                        UUID.randomUUID()))
-                .header("Authorization", "Bearer " + accessToken).header("Content-Type", "application/json")
-                .header("Accept", "application/json").asClass(Entitlements.class);
+        Entitlements entitlementsResponse = NetworkClient.get(
+            String.format("%s?requestId=%s", Constants.MICROSOFT_MINECRAFT_ENTITLEMENTS_URL,
+                UUID.randomUUID()),
+            Headers.of("Authorization", "Bearer " + accessToken, "Content-Type", "application/json", "Accept",
+                "application/json"),
+            Entitlements.class);
 
         return entitlementsResponse;
     }
 
-    public static Profile getMcProfile(String accessToken) throws IOException {
-        Profile profile = Download.build().setUrl(Constants.MICROSOFT_MINECRAFT_PROFILE_URL)
-                .header("Authorization", "Bearer " + accessToken).asClassWithThrow(Profile.class);
-
-        return profile;
+    @Nullable
+    public static Profile getMcProfile(String accessToken) throws DownloadException {
+        return NetworkClient.getWithThrow(
+            Constants.MICROSOFT_MINECRAFT_PROFILE_URL,
+            Headers.of("Authorization", "Bearer " + accessToken),
+            Profile.class);
     }
 }

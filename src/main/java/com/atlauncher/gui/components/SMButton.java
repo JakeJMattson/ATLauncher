@@ -27,7 +27,6 @@ import javax.swing.JToolTip;
 import com.atlauncher.gui.HoverLineBorder;
 import com.atlauncher.utils.Utils;
 
-@SuppressWarnings("serial")
 public class SMButton extends JButton {
     private static final Cursor hand = new Cursor(Cursor.HAND_CURSOR);
 
@@ -43,6 +42,7 @@ public class SMButton extends JButton {
         this(Utils.getIconImage(i), t);
     }
 
+    @Override
     public JToolTip createToolTip() {
         JToolTip tip = super.createToolTip();
         tip.setBorder(new HoverLineBorder());

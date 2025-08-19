@@ -19,8 +19,10 @@ package com.atlauncher.workers;
 
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
+import java.io.BufferedInputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.concurrent.ExecutionException;
 
 import javax.imageio.ImageIO;
 import javax.swing.ImageIcon;
@@ -54,24 +56,48 @@ public class BackgroundImageWorker extends SwingWorker<ImageIcon, Object> {
             try {
                 download.downloadFile();
             } catch (DownloadException ignored) {
+                // ignored
             }
         }
 
         if (Files.exists(path)) {
-            BufferedImage image = ImageIO.read(path.toFile());
+            try (BufferedInputStream inputStream = new BufferedInputStream(Files.newInputStream(path))) {
+                BufferedImage sourceImage = ImageIO.read(inputStream);
+                if (sourceImage != null) {
+                    int newWidth = width;
+                    int newHeight = height;
 
-            BufferedImage thumbnail = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
-            Graphics2D g = thumbnail.createGraphics();
-            g.drawImage(image, 0, 0, width, height, null);
-            g.dispose();
+                    // Compute scales to maintain the aspect ratio
+                    if (sourceImage.getWidth() > sourceImage.getHeight()) {
+                        newHeight = (sourceImage.getHeight() * width) / sourceImage.getWidth();
+                    } else {
+                        newWidth = (sourceImage.getWidth() * height) / sourceImage.getHeight();
+                    }
 
-            label.setIcon(new ImageIcon(thumbnail));
-            thumbnail.flush();
+                    BufferedImage scaledImage = new BufferedImage(newWidth, newHeight, BufferedImage.TYPE_INT_ARGB);
+                    Graphics2D g2d = scaledImage.createGraphics();
+                    g2d.drawImage(sourceImage, 0, 0, newWidth, newHeight, null);
+                    g2d.dispose();
+                    sourceImage.flush(); // Immediately discard large source image buffer
+                    return new ImageIcon(scaledImage);
+                }
+            }
         }
-
-        label.setVisible(true);
 
         return null;
     }
 
+    @Override
+    protected void done() {
+        try {
+            ImageIcon icon = get();
+            if (icon != null) {
+                label.setIcon(icon);
+            }
+        } catch (InterruptedException | ExecutionException e) {
+            e.printStackTrace();
+        } finally {
+            label.setVisible(true);
+        }
+    }
 }

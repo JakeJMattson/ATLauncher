@@ -1,12 +1,21 @@
 {
-  "useLwjglReplacement": true,
+  "useLwjglReplacement": false,
+  "analytics": {
+    "enabled": false,
+    "enabledVersion": "0.0.0.0",
+    "percentage": 0,
+    "autoSendInSeconds": 300
+  },
   "useGraphql": {
     "vanillaLoaderVersions": false,
     "loaderVersions": false,
     "loaderVersionsNonForge": false,
     "packActions": false,
     "news": false,
-    "unifiedModPacks": false
+    "unifiedModPacks": false,
+    "minecraftVersions": false,
+    "javaRuntimes": false,
+    "launcherLaunch": false
   },
   "minecraft": {
     "experiment": {
@@ -57,8 +66,11 @@
       "modsEnabled": true,
       "modpacksEnabled": true
     },
+    "ftb": {
+        "modpacksEnabled": true
+    },
     "modpacksch": {
-      "modpacksEnabled": true
+        "modpacksEnabled": false
     },
     "modrinth": {
       "modsEnabled": true,

@@ -20,17 +20,13 @@ package com.atlauncher.gui.dialogs;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
-import java.awt.GridBagConstraints;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 
-import javax.swing.BorderFactory;
-import javax.swing.ImageIcon;
 import javax.swing.JButton;
 import javax.swing.JDialog;
 import javax.swing.JPanel;
 import javax.swing.JTabbedPane;
-import javax.swing.border.Border;
 
 import org.mini2Dx.gettext.GetText;
 
@@ -39,9 +35,7 @@ import com.atlauncher.data.Instance;
 import com.atlauncher.gui.dialogs.instancesettings.CommandsInstanceSettingsTab;
 import com.atlauncher.gui.dialogs.instancesettings.GeneralInstanceSettingsTab;
 import com.atlauncher.gui.dialogs.instancesettings.JavaInstanceSettingsTab;
-import com.atlauncher.utils.Utils;
 
-@SuppressWarnings("serial")
 public class InstanceSettingsDialog extends JDialog {
     private final Instance instance;
 
@@ -51,14 +45,6 @@ public class InstanceSettingsDialog extends JDialog {
     private final GeneralInstanceSettingsTab generalInstanceSettingsTab;
     private final JavaInstanceSettingsTab javaInstanceSettingsTab;
     private final CommandsInstanceSettingsTab commandsInstanceSettingsTab;
-
-    final ImageIcon HELP_ICON = Utils.getIconImage(App.THEME.getIconPath("question"));
-    final ImageIcon ERROR_ICON = Utils.getIconImage(App.THEME.getIconPath("error"));
-    final ImageIcon WARNING_ICON = Utils.getIconImage(App.THEME.getIconPath("warning"));
-
-    final Border RESTART_BORDER = BorderFactory.createEmptyBorder(0, 0, 0, 5);
-
-    final GridBagConstraints gbc = new GridBagConstraints();
 
     public InstanceSettingsDialog(Instance instance) {
         // #. {0} is the name of the instance
@@ -71,14 +57,12 @@ public class InstanceSettingsDialog extends JDialog {
         this.commandsInstanceSettingsTab = new CommandsInstanceSettingsTab(instance);
 
         setupComponents();
-
         addWindowListener(new WindowAdapter() {
+            @Override
             public void windowClosing(WindowEvent arg0) {
                 close();
             }
         });
-
-        setVisible(true);
     }
 
     private void setupComponents() {
@@ -105,7 +89,8 @@ public class InstanceSettingsDialog extends JDialog {
 
         JButton saveButton = new JButton(GetText.tr("Save"));
         saveButton.addActionListener(arg0 -> {
-            if (javaInstanceSettingsTab.isValidJavaPath() && javaInstanceSettingsTab.isValidJavaParamaters()) {
+            if (javaInstanceSettingsTab.isValidJavaPath() && javaInstanceSettingsTab.isValidJavaParamaters()
+                    && generalInstanceSettingsTab.isValidQuickPlayOptionValue()) {
                 saveSettings();
                 App.TOASTER.pop("Instance Settings Saved");
                 close();
@@ -114,9 +99,7 @@ public class InstanceSettingsDialog extends JDialog {
         bottomPanel.add(saveButton);
 
         JButton cancelButton = new JButton(GetText.tr("Cancel"));
-        cancelButton.addActionListener(arg0 -> {
-            close();
-        });
+        cancelButton.addActionListener(arg0 -> close());
         bottomPanel.add(cancelButton);
 
         add(bottomPanel, BorderLayout.SOUTH);

@@ -29,7 +29,6 @@ import com.atlauncher.Gsons;
 import com.atlauncher.evnt.LogEvent;
 import com.atlauncher.evnt.LogEvent.LogType;
 import com.atlauncher.exceptions.LocalException;
-import com.atlauncher.network.Analytics;
 import com.atlauncher.network.DownloadException;
 import com.atlauncher.network.ErrorReporting;
 import com.atlauncher.thread.LoggingThread;
@@ -105,8 +104,6 @@ public final class LogManager {
         t.printStackTrace();
 
         try (CharArrayWriter writer = new CharArrayWriter()) {
-            Analytics.sendException(t.getMessage());
-
             if (!(t instanceof LocalException) && sendRemote) {
                 ErrorReporting.captureException(t);
             }
@@ -119,14 +116,15 @@ public final class LogManager {
             DownloadException exception = ((DownloadException) t);
 
             try {
-                if (exception.download.response != null && exception.response != null
-                        && (exception.download.response.header("Content-Type").equalsIgnoreCase("application/json")
-                                || exception.download.response.header("Content-Type")
+                if (exception.contentType != null
+                        && (exception.contentType.equalsIgnoreCase("application/json")
+                                || exception.contentType
                                         .equalsIgnoreCase("application/xml")
-                                || exception.download.response.header("Content-Type").startsWith("text/"))) {
+                                || exception.contentType.startsWith("text/"))) {
                     debug(exception.response, 5);
                 }
             } catch (Exception e) {
+                // ignored
             }
         }
     }

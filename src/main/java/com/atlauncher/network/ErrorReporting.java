@@ -29,6 +29,7 @@ import com.atlauncher.utils.Utils;
 import io.sentry.Breadcrumb;
 import io.sentry.Sentry;
 import io.sentry.SentryLevel;
+import io.sentry.protocol.User;
 
 public final class ErrorReporting {
     public static List<String> sentEvents = new ArrayList<>();
@@ -56,6 +57,7 @@ public final class ErrorReporting {
                         event.setServerName(null); // Don't send server names, they're useless
                         return event;
                     } catch (Throwable ignored) {
+                        // ignored
                     }
                     return event;
                 });
@@ -68,6 +70,14 @@ public final class ErrorReporting {
             }, true);
 
             sentryInitialised = true;
+        }
+    }
+
+    public static void setUserId(String userId) {
+        if (sentryInitialised && Sentry.isEnabled()) {
+            User user = new User();
+            user.setId(userId);
+            Sentry.setUser(user);
         }
     }
 
@@ -159,7 +169,7 @@ public final class ErrorReporting {
     }
 
     public static void recordInstancePlay(String packName, String packVersion, LoaderVersion loader,
-            int instanceVersion) {
+        int instanceVersion) {
         if (sentryInitialised && Sentry.isEnabled()) {
             Breadcrumb breadcrumb = new Breadcrumb("Playing instance");
             breadcrumb.setType("user");

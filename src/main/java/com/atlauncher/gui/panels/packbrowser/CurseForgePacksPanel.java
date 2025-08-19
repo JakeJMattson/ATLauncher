@@ -30,6 +30,7 @@ import javax.swing.JPanel;
 
 import org.mini2Dx.gettext.GetText;
 
+import com.atlauncher.App;
 import com.atlauncher.builders.HTMLBuilder;
 import com.atlauncher.constants.Constants;
 import com.atlauncher.constants.UIConstants;
@@ -45,6 +46,7 @@ import com.atlauncher.managers.ConfigManager;
 import com.atlauncher.managers.DialogManager;
 import com.atlauncher.managers.LogManager;
 import com.atlauncher.network.Analytics;
+import com.atlauncher.network.analytics.AnalyticsEvent;
 import com.atlauncher.utils.CurseForgeApi;
 
 public class CurseForgePacksPanel extends PackBrowserPlatformPanel {
@@ -60,7 +62,7 @@ public class CurseForgePacksPanel extends PackBrowserPlatformPanel {
 
         hasMorePages = packs != null && packs.size() == Constants.CURSEFORGE_PAGINATION_SIZE;
 
-        if (packs == null || packs.size() == 0) {
+        if (packs == null || packs.isEmpty()) {
             hasMorePages = false;
             contentPanel.removeAll();
             contentPanel.add(
@@ -77,7 +79,7 @@ public class CurseForgePacksPanel extends PackBrowserPlatformPanel {
         gbc.insets = UIConstants.FIELD_INSETS;
         gbc.fill = GridBagConstraints.BOTH;
 
-        List<CurseForgePackCard> cards = packs.stream().map(p -> new CurseForgePackCard(p))
+        List<CurseForgePackCard> cards = packs.stream().map(CurseForgePackCard::new)
                 .collect(Collectors.toList());
 
         contentPanel.removeAll();
@@ -94,7 +96,7 @@ public class CurseForgePacksPanel extends PackBrowserPlatformPanel {
         List<CurseForgeProject> packs = CurseForgeApi.searchModPacks(search, page - 1, sort, sortDescending, category,
                 minecraftVersion);
 
-        hasMorePages = packs != null && packs.size() == Constants.MODPACKS_CH_PAGINATION_SIZE;
+        hasMorePages = packs != null && packs.size() == Constants.FTB_PAGINATION_SIZE;
 
         if (packs != null) {
             for (CurseForgeProject pack : packs) {
@@ -202,10 +204,12 @@ public class CurseForgePacksPanel extends PackBrowserPlatformPanel {
         return hasMorePages;
     }
 
+    @Override
     public boolean supportsManualAdding() {
         return true;
     }
 
+    @Override
     public void addById(String id) {
         ProgressDialog<CurseForgeProject> progressDialog = new ProgressDialog<>(
                 // #. {0} is the platform were getting info from (e.g. CurseForge/Modrinth)
@@ -216,7 +220,7 @@ public class CurseForgePacksPanel extends PackBrowserPlatformPanel {
                 // #. {0} is the platform were getting info from (e.g. CurseForge/Modrinth)
                 GetText.tr("Cancelling Looking Up Pack On {0}", "Modrinth"));
         progressDialog.addThread(new Thread(() -> {
-            CurseForgeProject project = null;
+            CurseForgeProject project;
 
             if (id.startsWith("https://www.curseforge.com/minecraft/modpacks")) {
                 Pattern pattern = Pattern.compile(
@@ -261,10 +265,14 @@ public class CurseForgePacksPanel extends PackBrowserPlatformPanel {
             DialogManager.okDialog().setTitle(GetText.tr("No Account Selected"))
                     .setContent(GetText.tr("Cannot create instance as you have no account selected."))
                     .setType(DialogManager.ERROR).show();
+
+            if (AccountManager.getAccounts().isEmpty()) {
+                App.navigate(UIConstants.LAUNCHER_ACCOUNTS_TAB);
+            }
         } else {
-            Analytics.sendEvent(project.name, "InstallManual", getAnalyticsCategory());
-            Analytics.sendEvent(project.name, "Install", getAnalyticsCategory());
-            new InstanceInstallerDialog(project);
+            Analytics.trackEvent(AnalyticsEvent.forPackInstall(project));
+            InstanceInstallerDialog instanceInstallerDialog = new InstanceInstallerDialog(project);
+            instanceInstallerDialog.setVisible(true);
         }
     }
 

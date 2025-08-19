@@ -17,44 +17,37 @@
  */
 package com.atlauncher.managers;
 
-import java.io.File;
-import java.io.FileReader;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
-import java.util.LinkedList;
 
-import com.atlauncher.Data;
 import com.atlauncher.FileSystem;
 import com.atlauncher.Gsons;
+import com.atlauncher.data.MicrosoftAccount;
 import com.atlauncher.data.Server;
 import com.atlauncher.utils.FileUtils;
 import com.atlauncher.utils.Utils;
 
-import javax.swing.SwingUtilities;
+import io.reactivex.rxjava3.core.Observable;
+import io.reactivex.rxjava3.subjects.BehaviorSubject;
 
 public class ServerManager {
-    private static final List<Listener> listeners = new LinkedList<>();
+    /**
+     * Data holder for Servers.
+     * <p>
+     * Automatically updates subscribed entities downstream.
+     */
+    private static final BehaviorSubject<List<Server>> SERVERS = BehaviorSubject.createDefault(new ArrayList<>());
 
-    public static synchronized void addListener(Listener listener) {
-        listeners.add(listener);
-    }
-
-    public static synchronized void removeListener(Listener listener) {
-        listeners.remove(listener);
-    }
-
-    public static synchronized void post() {
-        SwingUtilities.invokeLater(() -> {
-            for (Listener listener : listeners) {
-                listener.onServersChanged();
-            }
-        });
-    }
-
-    public static List<Server> getServers() {
-        return Data.SERVERS;
+    /**
+     * @return Observable list of servers.
+     */
+    public static Observable<List<Server>> getServersObservable() {
+        return SERVERS;
     }
 
     /**
@@ -63,82 +56,81 @@ public class ServerManager {
     public static void loadServers() {
         PerformanceManager.start();
         LogManager.debug("Loading servers");
-        Data.SERVERS.clear();
+        ArrayList<Server> servers = new ArrayList<>();
 
-        for (String folder : Optional.of(FileSystem.SERVERS.toFile().list(Utils.getServerFileFilter()))
+        for (String folder : Optional.ofNullable(FileSystem.SERVERS.toFile().list(Utils.getServerFileFilter()))
                 .orElse(new String[0])) {
-            File serverDir = FileSystem.SERVERS.resolve(folder).toFile();
+            Path serverDir = FileSystem.SERVERS.resolve(folder);
 
             Server server;
 
-            try (FileReader fileReader = new FileReader(new File(serverDir, "server.json"))) {
-                server = Gsons.MINECRAFT.fromJson(fileReader, Server.class);
+            try (InputStreamReader fileReader = new InputStreamReader(
+                    Files.newInputStream(serverDir.resolve("server.json")),
+                    StandardCharsets.UTF_8)) {
+                server = Gsons.DEFAULT.fromJson(fileReader, Server.class);
+                server.ROOT = serverDir;
                 LogManager.debug("Loaded server from " + serverDir);
             } catch (Exception e) {
                 LogManager.logStackTrace("Failed to load server in the folder " + serverDir, e);
                 continue;
             }
 
-            if (server == null) {
-                LogManager.error("Failed to load server in the folder " + serverDir);
-                continue;
-            }
-
-            Data.SERVERS.add(server);
+            servers.add(server);
         }
 
+        SERVERS.onNext(servers);
         LogManager.debug("Finished loading servers");
         PerformanceManager.end();
     }
 
     public static void setServerVisibility(Server server, boolean collapsed) {
-        if (server != null) {
+        MicrosoftAccount selectedAccount = AccountManager.getSelectedAccount();
+
+        if (server != null && selectedAccount != null) {
             if (collapsed) {
                 // Closed It
-                if (!AccountManager.getSelectedAccount().collapsedServers.contains(server.name)) {
-                    AccountManager.getSelectedAccount().collapsedServers.add(server.name);
+                if (!selectedAccount.collapsedServers.contains(server.name)) {
+                    selectedAccount.collapsedServers.add(server.name);
                 }
             } else {
                 // Opened It
-                AccountManager.getSelectedAccount().collapsedServers.remove(server.name);
+                selectedAccount.collapsedServers.remove(server.name);
             }
             AccountManager.saveAccounts();
         }
     }
 
-    public static ArrayList<Server> getServersSorted() {
-        ArrayList<Server> servers = new ArrayList<>(Data.SERVERS);
-        servers.sort(Comparator.comparing(s -> s.name));
-        return servers;
-    }
-
-
     /**
      * Note, this method ignores ConstantConditions warning, as it always has.
      *
-     * @param server server to add
+     * @param server
+     *            server to add
      * @return if the server was added or not
      */
     @SuppressWarnings("ConstantConditions")
     public static boolean addServer(Server server) {
-        boolean added = Data.SERVERS.add(server);
-        if (added) post();
+        List<Server> servers = Optional.ofNullable(SERVERS.getValue()).orElse(new ArrayList<>());
+
+        boolean added = servers.add(server);
+        if (added) {
+            SERVERS.onNext(servers);
+        }
         return added;
     }
 
     public static void removeServer(Server server) {
-        if (Data.SERVERS.remove(server)) {
+        List<Server> servers = Optional.ofNullable(SERVERS.getValue()).orElse(new ArrayList<>());
+
+        if (servers.remove(server)) {
             FileUtils.delete(server.getRoot(), true);
-            post();
+            SERVERS.onNext(servers);
         }
     }
 
     public static boolean isServer(String name) {
-        return Data.SERVERS.stream()
-                .anyMatch(s -> s.getSafeName().equalsIgnoreCase(name.replaceAll("[^A-Za-z0-9]", "")));
-    }
+        List<Server> servers = Optional.ofNullable(SERVERS.getValue()).orElse(new ArrayList<>());
 
-    public interface Listener {
-        void onServersChanged();
+        return servers.stream()
+                .anyMatch(s -> s.getSafeName().equalsIgnoreCase(name.replaceAll("[^A-Za-z0-9]", "")));
     }
 }

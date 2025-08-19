@@ -20,6 +20,7 @@ package com.atlauncher.gui.card.packbrowser;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
+import java.awt.Font;
 import java.util.Comparator;
 import java.util.Optional;
 
@@ -32,13 +33,15 @@ import javax.swing.JSplitPane;
 import javax.swing.SwingConstants;
 import javax.swing.border.TitledBorder;
 import javax.swing.event.HyperlinkEvent;
+import javax.swing.text.html.HTMLDocument;
 
 import org.mini2Dx.gettext.GetText;
 
 import com.atlauncher.App;
-import com.atlauncher.data.modpacksch.ModpacksChPackArt;
-import com.atlauncher.data.modpacksch.ModpacksChPackArtType;
-import com.atlauncher.data.modpacksch.ModpacksChPackManifest;
+import com.atlauncher.constants.UIConstants;
+import com.atlauncher.data.ftb.FTBPackArt;
+import com.atlauncher.data.ftb.FTBPackArtType;
+import com.atlauncher.data.ftb.FTBPackManifest;
 import com.atlauncher.evnt.listener.RelocalizationListener;
 import com.atlauncher.evnt.manager.RelocalizationManager;
 import com.atlauncher.gui.components.BackgroundImageLabel;
@@ -46,15 +49,15 @@ import com.atlauncher.gui.dialogs.InstanceInstallerDialog;
 import com.atlauncher.managers.AccountManager;
 import com.atlauncher.managers.DialogManager;
 import com.atlauncher.network.Analytics;
+import com.atlauncher.network.analytics.AnalyticsEvent;
 import com.atlauncher.utils.Markdown;
 import com.atlauncher.utils.OS;
 
-@SuppressWarnings("serial")
 public class FTBPackCard extends JPanel implements RelocalizationListener {
-    private final JButton newInstanceButton = new JButton(GetText.tr("New Instance"));
+    private final JButton installButton = new JButton(GetText.tr("Install"));
     private final JButton websiteButton = new JButton(GetText.tr("Website"));
 
-    public FTBPackCard(final ModpacksChPackManifest pack) {
+    public FTBPackCard(final FTBPackManifest pack) {
         super();
         setLayout(new BorderLayout());
         setBorder(BorderFactory.createTitledBorder(null, pack.name, TitledBorder.LEADING, TitledBorder.DEFAULT_POSITION,
@@ -64,9 +67,9 @@ public class FTBPackCard extends JPanel implements RelocalizationListener {
 
         String imageUrl = null;
         if (pack.art != null) {
-            Optional<ModpacksChPackArt> art = pack.art.stream()
-                    .filter(a -> a.type == ModpacksChPackArtType.LOGO || a.type == ModpacksChPackArtType.SQUARE)
-                    .sorted(Comparator.comparingInt((ModpacksChPackArt a) -> a.updated).reversed()).findFirst();
+            Optional<FTBPackArt> art = pack.art.stream()
+                    .filter(a -> a.type == FTBPackArtType.LOGO || a.type == FTBPackArtType.SQUARE)
+                    .sorted(Comparator.comparingInt((FTBPackArt a) -> a.updated).reversed()).findFirst();
             if (art.isPresent()) {
                 imageUrl = art.get().url;
             }
@@ -83,19 +86,25 @@ public class FTBPackCard extends JPanel implements RelocalizationListener {
         splitter.setRightComponent(actionsPanel);
         splitter.setEnabled(false);
 
-        JPanel buttonsPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 5, 2));
+        JPanel buttonsPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 5, 0));
+        buttonsPanel.setBorder(BorderFactory.createEmptyBorder(5, 0, 5, 0));
 
-        newInstanceButton.addActionListener(e -> {
+        installButton.addActionListener(e -> {
             if (AccountManager.getSelectedAccount() == null) {
                 DialogManager.okDialog().setTitle(GetText.tr("No Account Selected"))
                         .setContent(GetText.tr("Cannot create instance as you have no account selected."))
                         .setType(DialogManager.ERROR).show();
+
+                if (AccountManager.getAccounts().isEmpty()) {
+                    App.navigate(UIConstants.LAUNCHER_ACCOUNTS_TAB);
+                }
             } else {
-                Analytics.sendEvent(pack.name, "Install", "FTBPack");
-                new InstanceInstallerDialog(pack);
+                Analytics.trackEvent(AnalyticsEvent.forPackInstall(pack));
+                InstanceInstallerDialog instanceInstallerDialog = new InstanceInstallerDialog(pack);
+                instanceInstallerDialog.setVisible(true);
             }
         });
-        buttonsPanel.add(newInstanceButton);
+        buttonsPanel.add(installButton);
 
         websiteButton.addActionListener(e -> OS.openWebBrowser(pack.getWebsiteUrl()));
         buttonsPanel.add(websiteButton);
@@ -106,7 +115,14 @@ public class FTBPackCard extends JPanel implements RelocalizationListener {
 
         JEditorPane descArea = new JEditorPane("text/html",
                 String.format("<html>%s</html>", Markdown.render(pack.description)));
+
+        Font font = App.THEME.getNormalFont();
+        String bodyRule = "p { font-family: " + font.getFamily() + "; " +
+                "font-size: " + font.getSize() + "pt; }";
+        ((HTMLDocument) descArea.getDocument()).getStyleSheet().addRule(bodyRule);
         descArea.setEditable(false);
+        descArea.setFocusable(false);
+        descArea.setHighlighter(null);
         descArea.addHyperlinkListener(e -> {
             if (e.getEventType() == HyperlinkEvent.EventType.ACTIVATED) {
                 OS.openWebBrowser(e.getURL());
@@ -123,7 +139,7 @@ public class FTBPackCard extends JPanel implements RelocalizationListener {
 
     @Override
     public void onRelocalization() {
-        newInstanceButton.setText(GetText.tr("New Instance"));
+        installButton.setText(GetText.tr("Install"));
         websiteButton.setText(GetText.tr("Website"));
     }
 }

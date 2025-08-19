@@ -37,9 +37,9 @@ import org.mini2Dx.gettext.GetText;
 
 import com.atlauncher.App;
 import com.atlauncher.constants.Constants;
+import com.atlauncher.data.ConsoleState;
 import com.atlauncher.evnt.listener.RelocalizationListener;
-import com.atlauncher.evnt.manager.ConsoleCloseManager;
-import com.atlauncher.evnt.manager.ConsoleOpenManager;
+import com.atlauncher.evnt.manager.ConsoleStateManager;
 import com.atlauncher.evnt.manager.RelocalizationManager;
 import com.atlauncher.gui.components.Console;
 import com.atlauncher.gui.components.ConsoleBottomBar;
@@ -56,12 +56,14 @@ public class LauncherConsole extends JFrame implements RelocalizationListener {
     private JMenuItem copy;
 
     public LauncherConsole() {
-        setTitle(Constants.LAUNCHER_NAME + " Console");
+        // #. {0} is the name of the launcher (ATLauncher)
+        setTitle(GetText.tr("{0} Console", Constants.LAUNCHER_NAME));
         setDefaultCloseOperation(JFrame.HIDE_ON_CLOSE);
         setIconImage(Utils.getImage("/assets/image/icon.png"));
         setLayout(new BorderLayout());
 
-        setMinimumSize(new Dimension(650, 400));
+        setMinimumSize(new Dimension(400, 200));
+        setSize(new Dimension(650, 400));
 
         try {
             if (App.settings.rememberWindowSizePosition && App.settings.consoleSize != null
@@ -86,8 +88,12 @@ public class LauncherConsole extends JFrame implements RelocalizationListener {
         RelocalizationManager.addListener(this);
 
         addComponentListener(new ComponentAdapter() {
+            @Override
             public void componentResized(ComponentEvent evt) {
                 Component c = (Component) evt.getSource();
+
+                bottomBar.hideBottomBarIconsIfNeeded();
+                setMinimumSize(new Dimension(Math.max(bottomBar.leftSide.getWidth(), 400), 200));
 
                 if (App.settings.rememberWindowSizePosition) {
                     App.settings.consoleSize = c.getSize();
@@ -95,6 +101,7 @@ public class LauncherConsole extends JFrame implements RelocalizationListener {
                 }
             }
 
+            @Override
             public void componentMoved(ComponentEvent evt) {
                 Component c = (Component) evt.getSource();
 
@@ -109,10 +116,11 @@ public class LauncherConsole extends JFrame implements RelocalizationListener {
     @Override
     public void setVisible(boolean flag) {
         super.setVisible(flag);
+        bottomBar.hideBottomBarIconsIfNeeded();
         if (flag) {
-            ConsoleOpenManager.post();
+            ConsoleStateManager.setState(ConsoleState.OPEN);
         } else {
-            ConsoleCloseManager.post();
+            ConsoleStateManager.setState(ConsoleState.CLOSED);
         }
     }
 
@@ -128,6 +136,7 @@ public class LauncherConsole extends JFrame implements RelocalizationListener {
         contextMenu.add(copy);
 
         console.addMouseListener(new MouseAdapter() {
+            @Override
             public void mousePressed(MouseEvent e) {
                 if (console.getSelectedText() != null) {
                     if (e.getButton() == MouseEvent.BUTTON3) {

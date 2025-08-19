@@ -33,32 +33,32 @@ import javax.swing.border.TitledBorder;
 import org.mini2Dx.gettext.GetText;
 
 import com.atlauncher.App;
-import com.atlauncher.data.Instance;
+import com.atlauncher.data.ModManagement;
 import com.atlauncher.data.curseforge.CurseForgeAttachment;
 import com.atlauncher.data.curseforge.CurseForgeFileDependency;
 import com.atlauncher.data.curseforge.CurseForgeProject;
 import com.atlauncher.gui.dialogs.CurseForgeProjectFileSelectorDialog;
 import com.atlauncher.network.Analytics;
+import com.atlauncher.network.analytics.AnalyticsEvent;
 import com.atlauncher.utils.CurseForgeApi;
 import com.atlauncher.utils.OS;
 import com.atlauncher.utils.Utils;
 import com.atlauncher.workers.BackgroundImageWorker;
 
-@SuppressWarnings("serial")
 public final class CurseForgeFileDependencyCard extends JPanel {
     private final CurseForgeProjectFileSelectorDialog parent;
     private final CurseForgeFileDependency dependency;
-    private final Instance instance;
+    private final ModManagement instanceOrServer;
 
     public CurseForgeFileDependencyCard(CurseForgeProjectFileSelectorDialog parent, CurseForgeFileDependency dependency,
-            Instance instance) {
+            ModManagement instanceOrServer) {
         this.parent = parent;
 
         setLayout(new BorderLayout());
         setPreferredSize(new Dimension(250, 180));
 
         this.dependency = dependency;
-        this.instance = instance;
+        this.instanceOrServer = instanceOrServer;
 
         setupComponents();
     }
@@ -91,8 +91,9 @@ public final class CurseForgeFileDependencyCard extends JPanel {
         buttonsPanel.add(viewButton);
 
         addButton.addActionListener(e -> {
-            Analytics.sendEvent(mod.name, "AddDependency", "CurseForgeMod");
-            new CurseForgeProjectFileSelectorDialog(parent, mod, instance);
+            Analytics.trackEvent(AnalyticsEvent.forAddMod(mod));
+            CurseForgeProjectFileSelectorDialog curseForgeProjectFileSelectorDialog = new CurseForgeProjectFileSelectorDialog(parent, mod, instanceOrServer);
+            curseForgeProjectFileSelectorDialog.setVisible(true);
             parent.reloadDependenciesPanel();
         });
 
@@ -106,8 +107,8 @@ public final class CurseForgeFileDependencyCard extends JPanel {
         setBorder(border);
 
         Optional<CurseForgeAttachment> attachment = mod.getLogo();
-        if (attachment.isPresent()) {
-            new BackgroundImageWorker(icon, attachment.get().thumbnailUrl, 60, 60).execute();
-        }
+        attachment.ifPresent(
+                curseForgeAttachment -> new BackgroundImageWorker(icon, curseForgeAttachment.thumbnailUrl, 60, 60)
+                        .execute());
     }
 }
